@@ -7,10 +7,11 @@ import logging
 import warnings
 from datetime import datetime, timedelta
 from datetime import timezone as _tz
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 import httpx
 
+from ._parse import parse_payload
 from .errors import DataQueryError, UnknownTsidWarning
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,55 @@ class AsyncDataQueryClient:
                 stacklevel=2,
             )
         return payload
+
+    async def fetch(
+        self,
+        tsids: str | Sequence[str],
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        lookback: timedelta = DEFAULT_LOOKBACK,
+        backend: Literal["pyarrow", "polars", "pandas"] = "pyarrow",
+    ) -> Any:
+        """Return a long-format frame in the requested backend.
+
+        Columns: ``timestamp`` (UTC), ``value``, ``quality``, ``tsid``,
+        ``location``, ``parameter``, ``units``.
+        """
+        payload = await self.fetch_raw(tsids, start=start, end=end, lookback=lookback)
+        table = parse_payload(payload)
+        if backend == "pyarrow":
+            return table
+        if backend == "polars":
+            import polars as pl
+
+            return pl.from_arrow(table)
+        if backend == "pandas":
+            return table.to_pandas()
+        raise ValueError(f"unknown backend: {backend!r}")
+
+    async def describe(
+        self,
+        tsids: str | Sequence[str],
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        lookback: timedelta = DEFAULT_LOOKBACK,
+    ) -> dict[str, Any]:
+        """Return location + tsid metadata without the time series values."""
+        payload = await self.fetch_raw(tsids, start=start, end=end, lookback=lookback)
+        return {
+            loc: {k: v for k, v in body.items() if k != "timeseries"}
+            | {
+                "timeseries": {
+                    t: {k: v for k, v in tb.items() if k != "values"}
+                    for t, tb in (body.get("timeseries") or {}).items()
+                    if isinstance(tb, dict)
+                }
+            }
+            for loc, body in payload.items()
+            if isinstance(body, dict)
+        }
 
 
 def _iso(dt: datetime) -> str:

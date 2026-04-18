@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import pyarrow as pa
 import pytest
 
 from nwd_dataquery.client import ENDPOINT, AsyncDataQueryClient
@@ -134,3 +135,107 @@ async def test_async_context_manager_closes_session():
         assert client._session is not None  # type: ignore[attr-defined]
         client._session.aclose = fake_close  # type: ignore[method-assign]
     assert called["closed"]
+
+
+def _success_handler(payload):
+    def handler(request):
+        return httpx.Response(200, json=payload)
+
+    return handler
+
+
+async def test_fetch_returns_pyarrow_table_by_default():
+    payload = {
+        "LWSC": {
+            "name": "Lake Washington",
+            "timeseries": {
+                "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW": {
+                    "parameter": "Elev-Lake",
+                    "units": "FT",
+                    "values": [["2026-04-11T18:00:00", 21.66, 0]],
+                }
+            },
+        }
+    }
+    client = _mock_client(_success_handler(payload))
+    table = await client.fetch("LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW")
+    await client.aclose()
+
+    assert isinstance(table, pa.Table)
+    assert table.num_rows == 1
+    assert table["value"][0].as_py() == 21.66
+
+
+async def test_fetch_backend_polars_returns_polars_frame():
+    pl = pytest.importorskip("polars")
+    payload = {
+        "LWSC": {
+            "name": "X",
+            "timeseries": {
+                "T": {
+                    "parameter": "P",
+                    "units": "U",
+                    "values": [["2026-04-11T18:00:00", 1.0, 0]],
+                }
+            },
+        }
+    }
+    client = _mock_client(_success_handler(payload))
+    df = await client.fetch("T", backend="polars")
+    await client.aclose()
+    assert isinstance(df, pl.DataFrame)
+    assert df.shape == (1, 7)
+
+
+async def test_fetch_backend_pandas_returns_pandas_frame():
+    pd = pytest.importorskip("pandas")
+    payload = {
+        "LWSC": {
+            "name": "X",
+            "timeseries": {
+                "T": {
+                    "parameter": "P",
+                    "units": "U",
+                    "values": [["2026-04-11T18:00:00", 1.0, 0]],
+                }
+            },
+        }
+    }
+    client = _mock_client(_success_handler(payload))
+    df = await client.fetch("T", backend="pandas")
+    await client.aclose()
+    assert isinstance(df, pd.DataFrame)
+    assert df.shape == (1, 7)
+
+
+async def test_fetch_rejects_unknown_backend():
+    client = _mock_client(_success_handler({}))
+    with pytest.warns(UnknownTsidWarning):
+        with pytest.raises(ValueError, match="unknown backend"):
+            await client.fetch("T", backend="duckdb")  # type: ignore[arg-type]
+    await client.aclose()
+
+
+async def test_describe_returns_metadata_without_values():
+    payload = {
+        "LWSC": {
+            "name": "Lake Washington",
+            "coordinates": {"latitude": 47.66, "longitude": -122.39},
+            "timeseries": {
+                "T": {
+                    "parameter": "Elev-Lake",
+                    "units": "FT",
+                    "notes": "(2001-2026)",
+                    "values": [["2026-04-11T18:00:00", 21.66, 0]],
+                }
+            },
+        }
+    }
+    client = _mock_client(_success_handler(payload))
+    meta = await client.describe("T")
+    await client.aclose()
+
+    assert meta["LWSC"]["name"] == "Lake Washington"
+    assert "values" not in meta["LWSC"]["timeseries"]["T"]
+    assert meta["LWSC"]["timeseries"]["T"]["parameter"] == "Elev-Lake"
+    assert meta["LWSC"]["timeseries"]["T"]["units"] == "FT"
