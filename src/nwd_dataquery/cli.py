@@ -156,7 +156,17 @@ def describe(
         async with AsyncDataQueryClient(**kwargs) as client:
             return await client.describe(tsids, start=start, end=end, lookback=lb)
 
-    meta = asyncio.run(_run())
+    try:
+        meta = asyncio.run(_run())
+    except Exception as exc:
+        from .errors import DataQueryError
+
+        if isinstance(exc, DataQueryError):
+            typer.secho(f"server error: {exc}", fg="red", err=True)
+            raise typer.Exit(code=2)
+        typer.secho(f"error: {exc}", fg="red", err=True)
+        raise typer.Exit(code=1)
+
     typer.echo(json.dumps(meta, indent=2, default=str))
 
 
@@ -177,7 +187,8 @@ def _write(table: pa.Table, fmt: str, out: Path | None) -> None:
                 }
                 sys.stdout.write(json.dumps(norm) + "\n")
     elif fmt == "parquet":
-        assert out is not None
+        if out is None:
+            raise ValueError("parquet output requires a file path")
         pa_pq.write_table(table, out)
     else:
         typer.secho(f"error: unknown --format {fmt!r}", fg="red", err=True)
