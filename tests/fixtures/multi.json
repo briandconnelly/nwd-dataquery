@@ -1,0 +1,21 @@
+{
+  "LWSC": {
+    "name": "Lake Washington Ship Canal",
+    "timeseries": {
+      "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW": {
+        "parameter": "Elev-Lake",
+        "units": "FT",
+        "values": [
+          ["2026-04-11T18:00:00", 21.66, 0]
+        ]
+      },
+      "LWSC.Flow-In.Ave.~1Day.1Day.CENWS-COMPUTED-RAW": {
+        "parameter": "Flow-In",
+        "units": "CFS",
+        "values": [
+          ["2026-04-11T00:00:00", 1500.0, null]
+        ]
+      }
+    }
+  }
+}
