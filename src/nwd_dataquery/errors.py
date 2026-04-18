@@ -1,4 +1,5 @@
 """Exception and warning types for nwd-dataquery."""
+
 from __future__ import annotations
 
 
