@@ -75,8 +75,7 @@ class AsyncDataQueryClient:
         if start is None and end is None:
             end = datetime.now(_tz.utc)
             start = end - lookback
-        elif start is None:
-            assert end is not None
+        elif start is None and end is not None:
             start = end - lookback
 
         params: dict[str, str] = {
