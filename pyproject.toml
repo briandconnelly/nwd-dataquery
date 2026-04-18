@@ -1,0 +1,40 @@
+[project]
+name = "nwd-dataquery"
+version = "0.1.0"
+description = "Async Python client for the USACE NWD Dataquery 2.0 hydrologic timeseries endpoint."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "Brian Connelly", email = "bdc@bconnelly.net" }]
+keywords = ["usace", "hydrology", "water", "timeseries", "dataquery"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+polars = ["polars>=1.0"]
+pandas = ["pandas>=2.0"]
+
+[project.scripts]
+nwd-dq = "nwd_dataquery.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/briandconnelly/nwd-dataquery"
+Issues = "https://github.com/briandconnelly/nwd-dataquery/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nwd_dataquery"]
