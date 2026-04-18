@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import pyarrow as pa
-import pytest  # noqa: F401
 
 from nwd_dataquery._parse import SCHEMA, parse_payload
 
