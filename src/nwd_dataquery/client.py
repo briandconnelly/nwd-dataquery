@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import warnings
-from datetime import datetime, timedelta
-from datetime import timezone as _tz
-from typing import Any, Literal, Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 
 import httpx
 
@@ -41,7 +41,7 @@ class AsyncDataQueryClient:
         self._session = session
         self._owns_session = session is None
 
-    async def __aenter__(self) -> "AsyncDataQueryClient":
+    async def __aenter__(self) -> AsyncDataQueryClient:
         self._session = self._get_or_build_session()
         return self
 
@@ -74,7 +74,7 @@ class AsyncDataQueryClient:
             raise ValueError("must provide at least one tsid")
 
         if start is None and end is None:
-            end = datetime.now(_tz.utc)
+            end = datetime.now(UTC)
             start = end - lookback
         elif start is None and end is not None:
             start = end - lookback
@@ -163,5 +163,5 @@ class AsyncDataQueryClient:
 def _iso(dt: datetime) -> str:
     """Format a datetime as ISO-8601 with a Z suffix (server-accepted)."""
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=_tz.utc)
-    return dt.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")

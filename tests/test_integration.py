@@ -7,7 +7,7 @@ subsequent run replays from disk with no network activity.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pyarrow as pa
 import pytest
@@ -21,8 +21,8 @@ async def test_integration_fetch_lwsc_elevation():
     async with AsyncDataQueryClient() as client:
         table = await client.fetch(
             "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW",
-            start=datetime(2026, 4, 10, tzinfo=timezone.utc),
-            end=datetime(2026, 4, 11, tzinfo=timezone.utc),
+            start=datetime(2026, 4, 10, tzinfo=UTC),
+            end=datetime(2026, 4, 11, tzinfo=UTC),
         )
     assert isinstance(table, pa.Table)
     assert table.schema == SCHEMA
@@ -34,8 +34,8 @@ async def test_integration_describe_returns_metadata():
     async with AsyncDataQueryClient() as client:
         meta = await client.describe(
             "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW",
-            start=datetime(2026, 4, 18, tzinfo=timezone.utc),
-            end=datetime(2026, 4, 19, tzinfo=timezone.utc),
+            start=datetime(2026, 4, 18, tzinfo=UTC),
+            end=datetime(2026, 4, 19, tzinfo=UTC),
         )
     assert "LWSC" in meta
     assert "timeseries" in meta["LWSC"]
