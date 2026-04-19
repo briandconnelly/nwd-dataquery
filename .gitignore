@@ -16,6 +16,9 @@ htmlcov/
 coverage.xml
 .mypy_cache/
 
+# Docs build
+docs/_build/
+
 # IDE
 .idea/
 .vscode/
