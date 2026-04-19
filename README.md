@@ -21,6 +21,10 @@ Python ≥3.12.
 
 Importing `nwd_dataquery` calls `truststore.inject_into_ssl()` to use the OS trust store. USACE `.mil` domains often can't be validated with certifi's bundle on Python installs from `uv`/official installers. If you have strong reasons not to touch the global SSL stack, don't import this package.
 
+### Alternate endpoint
+
+A public mirror reportedly exists at `public.crohms.org` (Columbia River Operational Hydromet Management System, a multi-agency partnership) using the same URL paths. Point to it via `--endpoint` / `AsyncDataQueryClient(endpoint=...)` if the primary host is unreachable. Unverified.
+
 ## Quick start (Python)
 
 ```python
@@ -80,6 +84,15 @@ Exit codes: `0` success, `1` transport error, `2` server/data-query error, `3` e
 | `parameter` | `string` | parameter name (`Elev-Lake`, `Flow-In`, …) |
 | `units` | `string` | server-reported units (`FT`, `CFS`, …) |
 
+## TSID anatomy
+
+The 6-part CWMS identifier: `LOC.PARAMETER.TYPE.INTERVAL.DURATION.VERSION`.
+
+- **`TYPE`** — `Inst` (instantaneous) or `Ave` (interval-averaged).
+- **`INTERVAL`** — `0`, `15Minutes`, `1Hour`, `~1Day`, `1Day`. A leading `~` marks irregular cadence.
+- **`DURATION`** — `0` for point observations, or an interval for aggregations.
+- **`VERSION`** — `SOURCE-QUALITY`. Sources observed: `NWSRADIO`, `IRIDIUM`, `GOES`, `USGS`, `USBR`, `CENWS-COMPUTED`, `CENWP-COMPUTED`, `CENWW-COMPUTED`, `CBT`, `RFC-NOS`, `NOAA`, `MIXED-COMPUTED`. Quality is `RAW` or `REV`. The special version `Best` is an alias for whichever source/quality is canonical for that series — prefer it for downstream consumption and keep the raw-version tsids for provenance.
+
 ## Known tsids
 
 | tsid | location | description | period of record |
@@ -93,9 +106,10 @@ Extend this list by watching XHR requests in the Dataquery 2.0 UI.
 
 ## Gotchas
 
-- **Empty payload is ambiguous.** The server returns `{}` for both "tsid doesn't exist" and "no data in window." The client always emits `UnknownTsidWarning` on empty payloads.
-- **Errors arrive as HTTP 200.** Bad input gets `Content-Type: text/plain` with a JSON `{"error": "..."}` body. The client parses this and raises `DataQueryError`.
+- **Empty payload is ambiguous.** The server returns `{}` for "unknown tsid," "no data in the requested window," *and* for seasonal tsids that aren't currently deployed (e.g. temporary summer gauges). The client always emits `UnknownTsidWarning`; you can't distinguish the cases without out-of-band knowledge.
+- **Everything comes back as `text/plain`.** Both successful responses and server-side errors use `Content-Type: text/plain; charset=UTF-8` and always respond HTTP 200. The client parses the body, checks for a top-level `"error"` key, and raises `DataQueryError` if present.
 - **Wildcards don't work.** `["LWSC.*"]` returns `{}`. Query the UI to discover tsids.
+- **Seasonal stations move in and out of the catalog.** Some station codes only appear in the Dataquery UI while the underlying gauge is physically deployed. Treat your tsid list as a moving target, not a fixed registry.
 
 ## Development
 
