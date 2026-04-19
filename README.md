@@ -102,7 +102,17 @@ The 6-part CWMS identifier: `LOC.PARAMETER.TYPE.INTERVAL.DURATION.VERSION`.
 | `LWSC.Elev-Lake.Ave.1Hour.1Hour.IRIDIUM-REV` | LWSC | Pool elevation — hourly average, Iridium satellite, reviewed | — |
 | `LWSC.Flow-In.Ave.~1Day.1Day.CENWS-COMPUTED-RAW` | LWSC | Daily average inflow — computed by Seattle District | — |
 
-Extend this list by watching XHR requests in the Dataquery 2.0 UI.
+See [Discovering tsids](#discovering-tsids) for how to grow this list.
+
+## Discovering tsids
+
+This package covers only the getjson endpoint — there is no catalog or search API from its point of view. Practical paths:
+
+**1. The Dataquery 2.0 UI.** Open <https://www.nwd-wc.usace.army.mil/dd/common/dataquery/>, navigate to a station, and watch the Network tab in DevTools. XHR requests to `webexec/getjson` include the tsid in the `query=` parameter — copy it out.
+
+**2. Grammar-based expansion from a seed.** Given one tsid you already know, enumerate plausible variants by swapping parts — `Ave`↔`Inst`, different `INTERVAL`s, different `VERSION`s like `NWSRADIO-RAW` → `IRIDIUM-REV` → `Best` — and probe each with `fetch()`. An empty payload (triggers `UnknownTsidWarning`) means the variant doesn't exist or has no data; a non-empty payload gives you a new confirmed tsid. See [TSID anatomy](#tsid-anatomy) for the vocabulary.
+
+**3. Track your own list.** The endpoint has no "list all" verb. Most users accumulate a curated list of tsids as they explore.
 
 ## Gotchas
 
