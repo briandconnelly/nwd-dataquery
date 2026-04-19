@@ -1,0 +1,102 @@
+interactions:
+- request:
+    body: ''
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Host:
+      - www.nwd-wc.usace.army.mil
+      User-Agent:
+      - python-httpx/0.28.1
+    method: GET
+    uri: https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson?timezone=GMT&query=%5B%22LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW%22%5D&startdate=2026-04-10T00%3A00%3A00Z&enddate=2026-04-11T00%3A00%3A00Z
+  response:
+    body:
+      string: "\n{\n   \"LWSC\": {\n      \"HUC\": \"\",\n      \"active_flag\": \"T\",\n
+        \     \"coordinates\": {\n         \"datum\": \"WGS84\",\n         \"latitude\":
+        47.6649153,\n         \"longitude\": -122.3945712\n      },\n      \"elevation\":
+        {\n         \"accuracy\": 0.0,\n         \"datum\": \"NGVD29\",\n         \"method\":
+        \"\",\n         \"value\": 20.0\n      },\n      \"location_type\": \" \",\n
+        \     \"name\": \"Lake Washington Ship Canal\",\n      \"responsibility\":
+        \"NWS\",\n      \"time_format\": \"%Y-%m-%dT%H:%M:%S%z\",\n      \"timeseries\":
+        {\n         \"LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW\": {\n            \"active_flag\":
+        1,\n            \"count\": 24,\n            \"duration\": \" \",\n            \"end_timestamp\":
+        \"2026-04-11T00:00:00\",\n            \"interval\": \" \",\n            \"max_value\":
+        21.66,\n            \"min_value\": 21.54,\n            \"notes\": \"(2001-2026)\",\n
+        \           \"parameter\": \"Elev-Lake\",\n            \"quality_type\": \"int\",\n
+        \           \"sigfig\": 3,\n            \"site_quality\": [],\n            \"start_timestamp\":
+        \"2026-04-10T00:00:00\",\n            \"units\": \"FT\",\n            \"values\":
+        [\n               [\n                  \"2026-04-10T00:00:00\",\n                  21.59,\n
+        \                 0\n               ],\n               [\n                  \"2026-04-10T01:00:00\",\n
+        \                 21.54,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T02:00:00\",\n                  21.62,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T03:00:00\",\n
+        \                 21.54,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T04:00:00\",\n                  21.63,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T05:00:00\",\n
+        \                 21.58,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T06:00:00\",\n                  21.63,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T08:00:00\",\n
+        \                 21.62,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T09:00:00\",\n                  21.62,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T10:00:00\",\n
+        \                 21.61,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T11:00:00\",\n                  21.63,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T12:00:00\",\n
+        \                 21.6,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T13:00:00\",\n                  21.63,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T14:00:00\",\n
+        \                 21.61,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T15:00:00\",\n                  21.63,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T16:00:00\",\n
+        \                 21.61,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T17:00:00\",\n                  21.64,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T18:00:00\",\n
+        \                 21.65,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T19:00:00\",\n                  21.6,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T20:00:00\",\n
+        \                 21.64,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T21:00:00\",\n                  21.6,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-10T22:00:00\",\n
+        \                 21.65,\n                  0\n               ],\n               [\n
+        \                 \"2026-04-10T23:00:00\",\n                  21.6,\n                  0\n
+        \              ],\n               [\n                  \"2026-04-11T00:00:00\",\n
+        \                 21.66,\n                  0\n               ]\n            ]\n
+        \        }\n      },\n      \"timezone\": \"GMT\",\n      \"tz_offset\": 0\n
+        \  }\n}\n"
+    headers:
+      Cache-Control:
+      - no-cache, private
+      Connection:
+      - Keep-Alive
+      Content-Type:
+      - text/plain; charset=UTF-8
+      Date:
+      - Sun, 19 Apr 2026 00:27:32 GMT
+      Keep-Alive:
+      - timeout=5, max=100
+      Referrer-Policy:
+      - strict-origin
+      Server:
+      - Apache
+      Set-Cookie:
+      - session=expiry=1776559053074579; max-age=600; path=/; HttpOnly; secure
+      - session=expiry=1776559053074579; max-age=600; path=/; HttpOnly; secure
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-XSS-Protection:
+      - 1; mode=block
+    status:
+      code: 200
+      message: OK
+version: 1
