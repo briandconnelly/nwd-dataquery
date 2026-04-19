@@ -4,6 +4,7 @@ First run these with ``pytest --record-mode=once -k integration`` to record
 cassettes against the live endpoint, then commit the cassette files. Every
 subsequent run replays from disk with no network activity.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
