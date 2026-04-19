@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Annotated
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.csv as pa_csv
 import pyarrow.parquet as pa_pq
 import typer
@@ -74,6 +75,10 @@ def fetch(
     quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
     verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Debug logging.")] = False,
     strict: Annotated[bool, typer.Option("--strict", help="Exit 3 on empty result.")] = False,
+    latest: Annotated[
+        bool,
+        typer.Option("--latest", help="Keep only the most recent row per tsid."),
+    ] = False,
 ) -> None:
     """Fetch observations for one or more tsids."""
     if fmt == "parquet" and out is None:
@@ -116,10 +121,26 @@ def fetch(
         typer.secho(f"error: {exc}", fg="red", err=True)
         raise typer.Exit(code=1) from exc
 
+    if latest:
+        table = _latest_per_tsid(table)
+
     if strict and table.num_rows == 0:
         raise typer.Exit(code=3)
 
     _write(table, fmt, out)
+
+
+def _latest_per_tsid(table: pa.Table) -> pa.Table:
+    if table.num_rows == 0:
+        return table
+    order = pc.sort_indices(
+        table,
+        sort_keys=[("tsid", "ascending"), ("timestamp", "descending")],
+    )
+    sorted_tbl = table.take(order)
+    tsids = sorted_tbl["tsid"].to_pylist()
+    keep = [i for i in range(len(tsids)) if i == 0 or tsids[i] != tsids[i - 1]]
+    return sorted_tbl.take(keep)
 
 
 @app.command()

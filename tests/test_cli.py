@@ -328,3 +328,84 @@ def test_write_unknown_format_raises(sample_table):
     with pytest.raises(typer.Exit) as exc_info:
         _write(sample_table, "xml", None)
     assert exc_info.value.exit_code == 2
+
+
+def _table_from_rows(rows: list[tuple[str, str, float]]) -> pa.Table:
+    import pyarrow.compute as pc
+
+    ts = pc.assume_timezone(
+        pa.array([r[0] for r in rows], type=pa.string()).cast(pa.timestamp("us")),
+        timezone="UTC",
+    )
+    return pa.table(
+        {
+            "timestamp": ts,
+            "value": pa.array([r[2] for r in rows], type=pa.float64()),
+            "quality": pa.array([0] * len(rows), type=pa.int64()),
+            "tsid": pa.array([r[1] for r in rows], type=pa.string()),
+            "location": pa.array(["LWSC"] * len(rows), type=pa.string()),
+            "parameter": pa.array(["Elev-Lake"] * len(rows), type=pa.string()),
+            "units": pa.array(["FT"] * len(rows), type=pa.string()),
+        }
+    )
+
+
+def test_latest_per_tsid_picks_most_recent_row():
+    from nwd_dataquery.cli import _latest_per_tsid
+
+    tbl = _table_from_rows(
+        [
+            ("2026-04-10T12:00:00", "A", 1.0),
+            ("2026-04-11T18:00:00", "A", 2.0),
+            ("2026-04-09T00:00:00", "B", 10.0),
+            ("2026-04-11T06:00:00", "B", 20.0),
+            ("2026-04-10T00:00:00", "B", 15.0),
+        ]
+    )
+    latest = _latest_per_tsid(tbl)
+    rows = {r["tsid"]: r["value"] for r in latest.to_pylist()}
+    assert rows == {"A": 2.0, "B": 20.0}
+    assert latest.num_rows == 2
+
+
+def test_latest_per_tsid_on_empty_table():
+    from nwd_dataquery.cli import _latest_per_tsid
+
+    empty = pa.schema(
+        [
+            pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+            pa.field("value", pa.float64()),
+            pa.field("quality", pa.int64()),
+            pa.field("tsid", pa.string()),
+            pa.field("location", pa.string()),
+            pa.field("parameter", pa.string()),
+            pa.field("units", pa.string()),
+        ]
+    ).empty_table()
+    assert _latest_per_tsid(empty).num_rows == 0
+
+
+def test_fetch_latest_flag_reduces_output():
+    tbl = _table_from_rows(
+        [
+            ("2026-04-10T12:00:00", "A", 1.0),
+            ("2026-04-11T18:00:00", "A", 2.0),
+            ("2026-04-11T06:00:00", "B", 20.0),
+        ]
+    )
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=tbl),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "A", "B", "--latest", "--format", "json"])
+    assert result.exit_code == 0, result.stderr
+    lines = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert len(lines) == 2
+    by_tsid = {r["tsid"]: r["value"] for r in lines}
+    assert by_tsid == {"A": 2.0, "B": 20.0}
