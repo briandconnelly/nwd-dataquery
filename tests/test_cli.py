@@ -18,9 +18,7 @@ def sample_table() -> pa.Table:
     return pa.table(
         {
             "timestamp": pc.assume_timezone(
-                pa.array(["2026-04-11T18:00:00"], type=pa.string()).cast(
-                    pa.timestamp("us")
-                ),
+                pa.array(["2026-04-11T18:00:00"], type=pa.string()).cast(pa.timestamp("us")),
                 timezone="UTC",
             ),
             "value": pa.array([21.66], type=pa.float64()),
@@ -107,9 +105,7 @@ def test_fetch_parquet_to_file(sample_table, tmp_path: Path):
             new=AsyncMock(return_value=None),
         ),
     ):
-        result = runner.invoke(
-            app, ["fetch", "T", "--format", "parquet", "--out", str(out)]
-        )
+        result = runner.invoke(app, ["fetch", "T", "--format", "parquet", "--out", str(out)])
     assert result.exit_code == 0
     assert out.exists()
     import pyarrow.parquet as pq
@@ -159,3 +155,176 @@ def test_describe_emits_json():
         result = runner.invoke(app, ["describe", "T"])
     assert result.exit_code == 0
     assert json.loads(result.stdout) == meta
+
+
+# --- coverage gap tests ---
+
+
+def test_fetch_bad_lookback_exits_2():
+    """cli.py:85-87 — parse_duration ValueError → exit 2."""
+    result = runner.invoke(app, ["fetch", "T", "--lookback", "garbage"])
+    assert result.exit_code == 2
+    assert "error" in result.stderr.lower()
+
+
+def test_fetch_quiet_suppresses_warnings(sample_table):
+    """cli.py:89-94 — --quiet branch."""
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--quiet"])
+    assert result.exit_code == 0
+
+
+def test_fetch_verbose_enables_logging(sample_table):
+    """cli.py:96-99 — --verbose branch."""
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--verbose"])
+    assert result.exit_code == 0
+
+
+def test_fetch_endpoint_override(sample_table):
+    """cli.py:103-104 — --endpoint override sets kwargs."""
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--endpoint", "http://example.invalid"])
+    assert result.exit_code == 0
+
+
+def test_fetch_data_query_error_exits_2():
+    """cli.py:110-115 — DataQueryError → exit 2."""
+    from nwd_dataquery.errors import DataQueryError
+
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(side_effect=DataQueryError("boom")),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T"])
+    assert result.exit_code == 2
+    assert "server error" in result.stderr.lower()
+
+
+def test_fetch_runtime_error_exits_1():
+    """cli.py:116-117 — generic RuntimeError → exit 1."""
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(side_effect=RuntimeError("network down")),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T"])
+    assert result.exit_code == 1
+    assert "error" in result.stderr.lower()
+
+
+def test_describe_bad_lookback_exits_2():
+    """cli.py:138-140 — parse_duration ValueError in describe → exit 2."""
+    result = runner.invoke(app, ["describe", "T", "--lookback", "nope"])
+    assert result.exit_code == 2
+    assert "error" in result.stderr.lower()
+
+
+def test_describe_endpoint_override():
+    """cli.py:144-145 — --endpoint override in describe."""
+    meta = {"LWSC": {"timeseries": {}}}
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.describe",
+            new=AsyncMock(return_value=meta),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["describe", "T", "--endpoint", "http://example.invalid"])
+    assert result.exit_code == 0
+
+
+def test_describe_data_query_error_exits_2():
+    """cli.py:151-156 — DataQueryError in describe → exit 2."""
+    from nwd_dataquery.errors import DataQueryError
+
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.describe",
+            new=AsyncMock(side_effect=DataQueryError("bad")),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["describe", "T"])
+    assert result.exit_code == 2
+    assert "server error" in result.stderr.lower()
+
+
+def test_describe_runtime_error_exits_1():
+    """cli.py:157-158 — generic RuntimeError in describe → exit 1."""
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.describe",
+            new=AsyncMock(side_effect=RuntimeError("oops")),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["describe", "T"])
+    assert result.exit_code == 1
+    assert "error" in result.stderr.lower()
+
+
+def test_write_parquet_none_out_raises(sample_table):
+    """cli.py:179-180 — _write parquet with out=None raises ValueError."""
+    from nwd_dataquery.cli import _write
+
+    with pytest.raises(ValueError, match="file path"):
+        _write(sample_table, "parquet", None)
+
+
+def test_write_unknown_format_raises(sample_table):
+    """cli.py:182-184 — _write unknown format → typer.Exit(code=2)."""
+    import typer
+
+    from nwd_dataquery.cli import _write
+
+    with pytest.raises(typer.Exit) as exc_info:
+        _write(sample_table, "xml", None)
+    assert exc_info.value.exit_code == 2

@@ -71,3 +71,26 @@ def test_schema_has_expected_column_order():
         "parameter",
         "units",
     ]
+
+
+# --- coverage gap tests ---
+
+
+def test_non_dict_location_body_is_skipped():
+    """_parse.py:42 — loc_body not a dict is skipped."""
+    payload = {"BAD_LOCATION": "not a dict", "LWSC": {"timeseries": {}}}
+    table = parse_payload(payload)
+    assert table.num_rows == 0
+
+
+def test_non_dict_ts_body_is_skipped():
+    """_parse.py:45 — ts_body not a dict is skipped."""
+    payload = {
+        "LWSC": {
+            "timeseries": {
+                "BAD_TSID": "not a dict",
+            }
+        }
+    }
+    table = parse_payload(payload)
+    assert table.num_rows == 0

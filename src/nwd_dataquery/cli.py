@@ -60,13 +60,9 @@ def fetch(
         datetime | None,
         typer.Option(help="ISO-8601 end.", formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"]),
     ] = None,
-    lookback: Annotated[
-        str, typer.Option(help="Relative lookback (e.g. 7d, 10y).")
-    ] = "7d",
+    lookback: Annotated[str, typer.Option(help="Relative lookback (e.g. 7d, 10y).")] = "7d",
     timezone: Annotated[str, typer.Option(help="Server timezone bucketing.")] = "GMT",
-    fmt: Annotated[
-        str, typer.Option("--format", "-f", help="csv | json | parquet")
-    ] = "csv",
+    fmt: Annotated[str, typer.Option("--format", "-f", help="csv | json | parquet")] = "csv",
     out: Annotated[
         Path | None,
         typer.Option("--out", "-o", help="Output file. Required for parquet."),
@@ -75,15 +71,9 @@ def fetch(
     endpoint: Annotated[
         str | None, typer.Option(help="Override the Dataquery 2.0 endpoint URL.")
     ] = None,
-    quiet: Annotated[
-        bool, typer.Option("-q", "--quiet", help="Suppress warnings.")
-    ] = False,
-    verbose: Annotated[
-        bool, typer.Option("-v", "--verbose", help="Debug logging.")
-    ] = False,
-    strict: Annotated[
-        bool, typer.Option("--strict", help="Exit 3 on empty result.")
-    ] = False,
+    quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Debug logging.")] = False,
+    strict: Annotated[bool, typer.Option("--strict", help="Exit 3 on empty result.")] = False,
 ) -> None:
     """Fetch observations for one or more tsids."""
     if fmt == "parquet" and out is None:
@@ -94,7 +84,7 @@ def fetch(
         lb = parse_duration(lookback)
     except ValueError as exc:
         typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from exc
 
     if quiet:
         import warnings
@@ -122,9 +112,9 @@ def fetch(
 
         if isinstance(exc, DataQueryError):
             typer.secho(f"server error: {exc}", fg="red", err=True)
-            raise typer.Exit(code=2)
+            raise typer.Exit(code=2) from exc
         typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
     if strict and table.num_rows == 0:
         raise typer.Exit(code=3)
@@ -147,7 +137,7 @@ def describe(
         lb = parse_duration(lookback)
     except ValueError as exc:
         typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from exc
 
     async def _run() -> dict:
         kwargs: dict[str, object] = {"timeout": timeout, "timezone": timezone}
@@ -163,9 +153,9 @@ def describe(
 
         if isinstance(exc, DataQueryError):
             typer.secho(f"server error: {exc}", fg="red", err=True)
-            raise typer.Exit(code=2)
+            raise typer.Exit(code=2) from exc
         typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
     typer.echo(json.dumps(meta, indent=2, default=str))
 
@@ -182,8 +172,7 @@ def _write(table: pa.Table, fmt: str, out: Path | None) -> None:
             for row in rows:
                 # Normalize datetime objects for JSON
                 norm = {
-                    k: (v.isoformat() if hasattr(v, "isoformat") else v)
-                    for k, v in row.items()
+                    k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in row.items()
                 }
                 sys.stdout.write(json.dumps(norm) + "\n")
     elif fmt == "parquet":

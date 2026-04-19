@@ -15,6 +15,6 @@ def test_unknown_tsid_warning_is_user_warning():
     assert issubclass(UnknownTsidWarning, UserWarning)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        warnings.warn("empty", UnknownTsidWarning)
+        warnings.warn("empty", UnknownTsidWarning, stacklevel=2)
     assert len(caught) == 1
     assert issubclass(caught[0].category, UnknownTsidWarning)

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pyarrow as pa
@@ -27,16 +27,14 @@ async def test_fetch_raw_builds_expected_query_params():
     with pytest.warns(UnknownTsidWarning):
         await client.fetch_raw(
             "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW",
-            start=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            end=datetime(2026, 1, 8, tzinfo=timezone.utc),
+            start=datetime(2026, 1, 1, tzinfo=UTC),
+            end=datetime(2026, 1, 8, tzinfo=UTC),
         )
     await client.aclose()
 
     assert captured["url"].startswith(ENDPOINT)
     assert captured["params"]["timezone"] == "GMT"
-    assert captured["params"]["query"] == json.dumps(
-        ["LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW"]
-    )
+    assert captured["params"]["query"] == json.dumps(["LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW"])
     assert captured["params"]["startdate"] == "2026-01-01T00:00:00Z"
     assert captured["params"]["enddate"] == "2026-01-08T00:00:00Z"
 
@@ -53,9 +51,7 @@ async def test_fetch_raw_default_window_is_last_7_days():
         await client.fetch_raw("T")
     await client.aclose()
 
-    start = datetime.fromisoformat(
-        captured["params"]["startdate"].replace("Z", "+00:00")
-    )
+    start = datetime.fromisoformat(captured["params"]["startdate"].replace("Z", "+00:00"))
     end = datetime.fromisoformat(captured["params"]["enddate"].replace("Z", "+00:00"))
     delta = end - start
     assert timedelta(days=6, hours=23) <= delta <= timedelta(days=7, hours=1)
@@ -210,9 +206,8 @@ async def test_fetch_backend_pandas_returns_pandas_frame():
 
 async def test_fetch_rejects_unknown_backend():
     client = _mock_client(_success_handler({}))
-    with pytest.warns(UnknownTsidWarning):
-        with pytest.raises(ValueError, match="unknown backend"):
-            await client.fetch("T", backend="duckdb")  # type: ignore[arg-type]
+    with pytest.warns(UnknownTsidWarning), pytest.raises(ValueError, match="unknown backend"):
+        await client.fetch("T", backend="duckdb")  # type: ignore[arg-type]
     await client.aclose()
 
 
@@ -239,3 +234,55 @@ async def test_describe_returns_metadata_without_values():
     assert "values" not in meta["LWSC"]["timeseries"]["T"]
     assert meta["LWSC"]["timeseries"]["T"]["parameter"] == "Elev-Lake"
     assert meta["LWSC"]["timeseries"]["T"]["units"] == "FT"
+
+
+# --- coverage gap tests ---
+
+
+async def test_fetch_raw_start_none_end_provided():
+    """client.py:80 — start=None, end provided → start = end - lookback."""
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(200, json={})
+
+    client = _mock_client(handler)
+    end = datetime(2026, 4, 18, tzinfo=UTC)
+    lb = timedelta(days=3)
+    with pytest.warns(UnknownTsidWarning):
+        await client.fetch_raw("T", end=end, lookback=lb)
+    await client.aclose()
+
+    start_str = captured["params"]["startdate"]
+    end_str = captured["params"]["enddate"]
+    assert start_str == "2026-04-15T00:00:00Z"
+    assert end_str == "2026-04-18T00:00:00Z"
+
+
+async def test_fetch_raw_text_plain_non_json_body_does_not_raise():
+    """client.py:97-98 — text/plain response where body is not valid JSON."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"not json at all",
+            headers={"content-type": "text/plain"},
+        )
+
+    client = _mock_client(handler)
+    # The text/plain branch catches ValueError and sets body=None, then falls
+    # through to raise_for_status() and response.json() — but response.json()
+    # on "not json at all" also raises ValueError which bubbles to the caller.
+    with pytest.raises(ValueError):
+        await client.fetch_raw("T")
+    await client.aclose()
+
+
+async def test_iso_naive_datetime_treated_as_utc():
+    """client.py:166 — _iso() with naive datetime prepends UTC offset."""
+    from nwd_dataquery.client import _iso
+
+    naive = datetime(2026, 1, 1)  # no tzinfo
+    result = _iso(naive)
+    assert result == "2026-01-01T00:00:00Z"
