@@ -183,19 +183,28 @@ def describe(
 
 def _write(table: pa.Table, fmt: str, out: Path | None) -> None:
     if fmt == "csv":
-        buf = io.BytesIO()
-        pa_csv.write_csv(table, buf)
-        sys.stdout.buffer.write(buf.getvalue())
+        if out is not None:
+            with out.open("wb") as f:
+                pa_csv.write_csv(table, f)
+        else:
+            buf = io.BytesIO()
+            pa_csv.write_csv(table, buf)
+            sys.stdout.buffer.write(buf.getvalue())
     elif fmt == "json":
         # NDJSON: one object per row
-        for batch in table.to_batches():
-            rows = batch.to_pylist()
-            for row in rows:
-                # Normalize datetime objects for JSON
-                norm = {
-                    k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in row.items()
-                }
-                sys.stdout.write(json.dumps(norm) + "\n")
+        sink = out.open("w") if out is not None else sys.stdout
+        try:
+            for batch in table.to_batches():
+                rows = batch.to_pylist()
+                for row in rows:
+                    # Normalize datetime objects for JSON
+                    norm = {
+                        k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in row.items()
+                    }
+                    sink.write(json.dumps(norm) + "\n")
+        finally:
+            if out is not None:
+                sink.close()
     elif fmt == "parquet":
         if out is None:
             raise ValueError("parquet output requires a file path")

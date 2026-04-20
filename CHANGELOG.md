@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - SSL trust handling: the client now fetches the missing TLS intermediate from USACE's endpoint via AIA (using `aia-chaser`) and builds a per-endpoint `SSLContext`, replacing the previous import-time `truststore.inject_into_ssl()` global injection. Importing `nwd_dataquery` no longer mutates Python's SSL stack. Required because USACE began serving only the leaf certificate ~2026-04-19, breaking chain validation on platforms whose TLS stack doesn't AIA-chase (notably Linux + CPython).
 
+### Fixed
+
+- `nwd-dq fetch --out PATH` now writes CSV and NDJSON output to the given file; previously it was ignored for non-parquet formats and output always went to stdout.
+
 ### Removed
 
 - `truststore` is no longer a runtime dependency.
