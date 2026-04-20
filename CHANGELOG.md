@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `nwd-dq fetch --out PATH` now writes CSV and NDJSON output to the given file; previously it was ignored for non-parquet formats and output always went to stdout.
+
 ## [0.1.0] - 2026-04-19
 
 Initial release.

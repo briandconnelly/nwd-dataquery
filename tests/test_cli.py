@@ -114,6 +114,49 @@ def test_fetch_parquet_to_file(sample_table, tmp_path: Path):
     assert round_trip.num_rows == 1
 
 
+def test_fetch_csv_to_file(sample_table, tmp_path: Path):
+    out = tmp_path / "out.csv"
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--out", str(out)])
+    assert result.exit_code == 0, result.stderr
+    assert out.exists()
+    text = out.read_text()
+    assert "timestamp" in text  # CSV header
+    assert "21.66" in text
+    assert "21.66" not in result.stdout  # did not also print to stdout
+
+
+def test_fetch_json_to_file(sample_table, tmp_path: Path):
+    out = tmp_path / "out.ndjson"
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--format", "json", "--out", str(out)])
+    assert result.exit_code == 0, result.stderr
+    assert out.exists()
+    lines = [line for line in out.read_text().splitlines() if line.strip()]
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["value"] == 21.66
+    assert "21.66" not in result.stdout  # did not also print to stdout
+
+
 def test_fetch_strict_exits_3_on_empty():
     empty = pa.schema(
         [
