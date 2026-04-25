@@ -5,7 +5,7 @@ from __future__ import annotations
 from .client import AsyncDataQueryClient
 from .errors import DataQueryError, UnknownTsidWarning
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     "AsyncDataQueryClient",
     "DataQueryError",
