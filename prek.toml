@@ -26,3 +26,9 @@ hooks = [
     { id = "ruff-check", args = ["--fix"] },
     { id = "ruff-format" },
 ]
+
+[[repos]]
+repo = "local"
+hooks = [
+    { id = "ty", name = "ty check", entry = "uv run ty check", language = "system", types_or = ["python", "toml"], pass_filenames = false, files = "^(src/|pyproject\\.toml$)" },
+]
