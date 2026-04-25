@@ -61,7 +61,10 @@ class AsyncDataQueryClient:
         self._owns_session = session is None
 
     async def __aenter__(self) -> AsyncDataQueryClient:
-        self._session = self._get_or_build_session()
+        # Session creation is deferred to the first request so that simply
+        # entering the context manager does not trigger an AIA fetch for
+        # HTTPS endpoints — important for tests that mock `fetch()` and for
+        # callers that may abandon the context without making a request.
         return self
 
     async def __aexit__(self, *exc_info: object) -> None:
