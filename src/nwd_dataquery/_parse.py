@@ -57,8 +57,8 @@ def parse_payload(payload: dict[str, Any]) -> pa.Table:
     if not ts_raw:
         return SCHEMA.empty_table()
 
-    parsed = pc.strptime(pa.array(ts_raw), format="%Y-%m-%dT%H:%M:%S", unit="us")
-    parsed = pc.assume_timezone(parsed, "UTC")
+    parsed = pc.strptime(pa.array(ts_raw), format="%Y-%m-%dT%H:%M:%S", unit="us")  # ty:ignore[unresolved-attribute]
+    parsed = pc.assume_timezone(parsed, "UTC")  # ty:ignore[unresolved-attribute]
 
     return pa.table(
         {
