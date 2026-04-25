@@ -290,16 +290,23 @@ def raw(
         typer.echo(text)
 
 
-def _write(table: pa.Table, fmt: OutputFormat | str, out: Path | None) -> None:
+def _write(
+    table: pa.Table,
+    fmt: OutputFormat | str,
+    out: Path | None,
+    *,
+    include_header: bool = True,
+) -> None:
     if fmt == OutputFormat.csv:
         import pyarrow.csv as pa_csv
 
+        write_options = pa_csv.WriteOptions(include_header=include_header)
         if out is not None:
             with out.open("wb") as f:
-                pa_csv.write_csv(table, f)
+                pa_csv.write_csv(table, f, write_options)
         else:
             buf = io.BytesIO()
-            pa_csv.write_csv(table, buf)
+            pa_csv.write_csv(table, buf, write_options)
             sys.stdout.buffer.write(buf.getvalue())
     elif fmt in (OutputFormat.ndjson, OutputFormat.json):
         # NDJSON: one object per row. `json` is currently an alias.

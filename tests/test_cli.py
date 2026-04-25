@@ -498,6 +498,22 @@ def test_write_unknown_format_raises(sample_table):
     assert exc_info.value.exit_code == 2
 
 
+def test_write_csv_no_header_to_buffer(sample_table):
+    """_write with include_header=False omits the CSV header row."""
+    import io
+
+    from nwd_dataquery.cli import OutputFormat, _write
+
+    buf = io.BytesIO()
+    with patch("sys.stdout") as mock_stdout:
+        mock_stdout.buffer = buf
+        _write(sample_table, OutputFormat.csv, None, include_header=False)
+
+    text = buf.getvalue().decode()
+    assert "timestamp" not in text  # no header row
+    assert "21.66" in text
+
+
 def _table_from_rows(rows: list[tuple[str, str, float]]) -> pa.Table:
     import pyarrow.compute as pc
 
