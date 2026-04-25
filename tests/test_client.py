@@ -121,16 +121,46 @@ async def test_fetch_raw_returns_payload_on_success():
     assert payload == data
 
 
-async def test_async_context_manager_closes_session():
+async def test_async_context_manager_does_not_build_session_eagerly(monkeypatch):
+    """Context entry must not trigger session creation (and therefore AIA fetch)."""
+    from nwd_dataquery import client as client_mod
+
+    def _explode(url: str) -> object:
+        raise AssertionError("session must not be built on context entry")
+
+    monkeypatch.setattr(client_mod, "_ssl_context_for", _explode)
+
+    async with AsyncDataQueryClient() as client:
+        assert client._session is None  # type: ignore[attr-defined]
+
+
+async def test_async_context_manager_closes_session_after_use():
     called = {"closed": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
 
     async def fake_close():
         called["closed"] = True
 
-    async with AsyncDataQueryClient() as client:
-        assert client._session is not None  # type: ignore[attr-defined]
-        client._session.aclose = fake_close  # type: ignore[method-assign]
+    transport = httpx.MockTransport(handler)
+    session = httpx.AsyncClient(transport=transport)
+    session.aclose = fake_close  # type: ignore[method-assign]
+
+    # Inject the session so the context manager owns and closes it.
+    client = AsyncDataQueryClient()
+    client._session = session  # type: ignore[attr-defined]
+    client._owns_session = True  # type: ignore[attr-defined]
+    async with client:
+        with pytest.warns(UnknownTsidWarning):
+            await client.fetch_raw("T")
     assert called["closed"]
+
+
+async def test_aclose_without_request_is_noop():
+    """Exiting the context without making a request must not error."""
+    async with AsyncDataQueryClient():
+        pass  # no requests made, no session built
 
 
 def _success_handler(payload):
