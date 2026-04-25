@@ -15,7 +15,6 @@ from urllib.parse import urlsplit
 import httpx
 from aia_chaser import AiaChaser
 
-from ._parse import parse_payload
 from .errors import DataQueryError, UnknownTsidWarning
 
 logger = logging.getLogger(__name__)
@@ -146,6 +145,10 @@ class AsyncDataQueryClient:
         Columns: ``timestamp`` (UTC), ``value``, ``quality``, ``tsid``,
         ``location``, ``parameter``, ``units``.
         """
+        # Imported lazily so that `import nwd_dataquery` does not pull in
+        # pyarrow on the version-check / metadata-only paths.
+        from ._parse import parse_payload
+
         payload = await self.fetch_raw(tsids, start=start, end=end, lookback=lookback)
         table = parse_payload(payload)
         if backend == "pyarrow":
