@@ -260,8 +260,8 @@ async def test_fetch_raw_start_none_end_provided():
     assert end_str == "2026-04-18T00:00:00Z"
 
 
-async def test_fetch_raw_text_plain_non_json_body_does_not_raise():
-    """client.py:97-98 — text/plain response where body is not valid JSON."""
+async def test_fetch_raw_non_json_body_raises_value_error():
+    """A 200 OK response whose body isn't JSON propagates a ValueError."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -271,10 +271,92 @@ async def test_fetch_raw_text_plain_non_json_body_does_not_raise():
         )
 
     client = _mock_client(handler)
-    # The text/plain branch catches ValueError and sets body=None, then falls
-    # through to raise_for_status() and response.json() — but response.json()
-    # on "not json at all" also raises ValueError which bubbles to the caller.
     with pytest.raises(ValueError):
+        await client.fetch_raw("T")
+    await client.aclose()
+
+
+async def test_fetch_raw_raises_data_query_error_on_application_json_error_body():
+    """A JSON error body served as application/json must still surface as DataQueryError."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"error": "Malformed query"},
+            headers={"content-type": "application/json"},
+        )
+
+    client = _mock_client(handler)
+    with pytest.raises(DataQueryError, match="Malformed query"):
+        await client.fetch_raw("T")
+    await client.aclose()
+
+
+async def test_fetch_raw_raises_data_query_error_when_content_type_missing():
+    """No Content-Type header, JSON error body — still raises DataQueryError."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=json.dumps({"error": "boom"}).encode())
+
+    client = _mock_client(handler)
+    with pytest.raises(DataQueryError, match="boom"):
+        await client.fetch_raw("T")
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    ("body_bytes", "type_name"),
+    [
+        (b"[1, 2, 3]", "list"),
+        (b'"oops"', "str"),
+        (b"null", "NoneType"),
+        (b"42", "int"),
+    ],
+)
+async def test_fetch_raw_raises_on_non_dict_payload(body_bytes, type_name):
+    """Non-object JSON payloads violate the function contract — raise clearly."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body_bytes)
+
+    client = _mock_client(handler)
+    with pytest.raises(DataQueryError, match=f"got {type_name}"):
+        await client.fetch_raw("T")
+    await client.aclose()
+
+
+async def test_fetch_raw_http_error_takes_precedence_over_json_decode_error():
+    """5xx with non-JSON body should surface the HTTP error, not a JSON decode error."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, content=b"not json")
+
+    client = _mock_client(handler)
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.fetch_raw("T")
+    await client.aclose()
+
+
+async def test_fetch_raw_http_error_takes_precedence_over_shape_violation():
+    """5xx with a non-dict JSON body raises HTTPStatusError, not DataQueryError."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, content=b"[1, 2, 3]")
+
+    client = _mock_client(handler)
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.fetch_raw("T")
+    await client.aclose()
+
+
+async def test_fetch_raw_5xx_with_error_body_still_surfaces_data_query_error():
+    """A non-2xx response carrying {"error": ...} keeps the actionable message."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": "Service unavailable"})
+
+    client = _mock_client(handler)
+    with pytest.raises(DataQueryError, match="Service unavailable"):
         await client.fetch_raw("T")
     await client.aclose()
 
