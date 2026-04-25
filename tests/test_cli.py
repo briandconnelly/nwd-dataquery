@@ -191,6 +191,115 @@ def test_fetch_strict_exits_3_on_empty():
     assert result.exit_code == 3
 
 
+def test_raw_emits_pretty_json_to_stdout():
+    payload = {"LWSC": {"name": "Lake Washington", "timeseries": {"T": {"parameter": "P"}}}}
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch_raw",
+            new=AsyncMock(return_value=payload),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["raw", "T"])
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == payload
+    # pretty-printed: contains newlines and indentation
+    assert "\n  " in result.stdout
+
+
+def test_raw_writes_to_out_file(tmp_path: Path):
+    payload = {"LWSC": {"name": "Lake Washington"}}
+    out = tmp_path / "raw.json"
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch_raw",
+            new=AsyncMock(return_value=payload),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["raw", "T", "--out", str(out)])
+    assert result.exit_code == 0, result.stderr
+    assert out.exists()
+    assert json.loads(out.read_text()) == payload
+    assert "Lake Washington" not in result.stdout
+
+
+def test_raw_data_query_error_exits_2():
+    from nwd_dataquery.errors import DataQueryError
+
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch_raw",
+            new=AsyncMock(side_effect=DataQueryError("Malformed query")),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["raw", "T"])
+    assert result.exit_code == 2
+    assert "server error" in result.stderr.lower()
+
+
+def test_raw_runtime_error_exits_1():
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch_raw",
+            new=AsyncMock(side_effect=RuntimeError("network down")),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["raw", "T"])
+    assert result.exit_code == 1
+    assert "error" in result.stderr.lower()
+
+
+def test_raw_bad_lookback_exits_2():
+    result = runner.invoke(app, ["raw", "T", "--lookback", "garbage"])
+    assert result.exit_code == 2
+    assert "error" in result.stderr.lower()
+
+
+def test_raw_quiet_suppresses_warnings():
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch_raw",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["raw", "T", "--quiet"])
+    assert result.exit_code == 0
+
+
+def test_raw_endpoint_override():
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch_raw",
+            new=AsyncMock(return_value={}),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["raw", "T", "--endpoint", "http://example.invalid"])
+    assert result.exit_code == 0
+
+
 def test_describe_emits_json():
     meta = {"LWSC": {"name": "X", "timeseries": {"T": {"parameter": "P"}}}}
     with (

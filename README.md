@@ -69,6 +69,7 @@ nwd-dq fetch LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW --lookback 30d
 nwd-dq fetch LWSC.Flow-In.Ave.~1Day.1Day.CENWS-COMPUTED-RAW \
     --start 2016-01-01 --format parquet --out flows.pq
 nwd-dq describe LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW | jq
+nwd-dq raw LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW --lookback 1d  # raw upstream JSON
 nwd-dq --version
 ```
 
