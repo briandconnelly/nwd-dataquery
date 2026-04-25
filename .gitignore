@@ -19,6 +19,9 @@ coverage.xml
 # Docs build
 docs/_build/
 
+# Local-only working notes (superpowers plans, brainstorming artifacts, etc.)
+docs/superpowers/
+
 # IDE
 .idea/
 .vscode/

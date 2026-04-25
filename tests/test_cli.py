@@ -173,7 +173,64 @@ def test_fetch_json_to_file(sample_table, tmp_path: Path):
     assert "21.66" not in result.stdout  # did not also print to stdout
 
 
-def test_fetch_strict_exits_3_on_empty():
+def test_fetch_fail_empty_exits_3_on_empty():
+    """--fail-empty is the new canonical name for the empty-result exit-3 contract."""
+    empty = pa.schema(
+        [
+            pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+            pa.field("value", pa.float64()),
+            pa.field("quality", pa.int64()),
+            pa.field("tsid", pa.string()),
+            pa.field("location", pa.string()),
+            pa.field("parameter", pa.string()),
+            pa.field("units", pa.string()),
+        ]
+    ).empty_table()
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=empty),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--fail-empty"])
+    assert result.exit_code == 3
+
+
+def test_fetch_strict_quiet_suppresses_deprecation_warning():
+    """--quiet ('Suppress warnings') silences the --strict deprecation message."""
+    empty = pa.schema(
+        [
+            pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+            pa.field("value", pa.float64()),
+            pa.field("quality", pa.int64()),
+            pa.field("tsid", pa.string()),
+            pa.field("location", pa.string()),
+            pa.field("parameter", pa.string()),
+            pa.field("units", pa.string()),
+        ]
+    ).empty_table()
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=empty),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--strict", "--quiet"])
+    assert result.exit_code == 3  # exit-3 contract still honored
+    assert "deprecated" not in result.stderr.lower()
+    assert result.stderr == ""
+
+
+def test_fetch_strict_still_works_but_warns():
+    """--strict is preserved for one release; emits a deprecation warning to stderr."""
     empty = pa.schema(
         [
             pa.field("timestamp", pa.timestamp("us", tz="UTC")),
@@ -197,6 +254,8 @@ def test_fetch_strict_exits_3_on_empty():
     ):
         result = runner.invoke(app, ["fetch", "T", "--strict"])
     assert result.exit_code == 3
+    assert "deprecated" in result.stderr.lower()
+    assert "--fail-empty" in result.stderr
 
 
 def test_raw_emits_pretty_json_to_stdout():
@@ -496,6 +555,71 @@ def test_write_unknown_format_raises(sample_table):
     with pytest.raises(typer.Exit) as exc_info:
         _write(sample_table, "xml", None)
     assert exc_info.value.exit_code == 2
+
+
+def test_fetch_csv_no_header_to_stdout(sample_table):
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--no-header"])
+    assert result.exit_code == 0, result.stderr
+    assert "timestamp" not in result.stdout  # header suppressed
+    assert "21.66" in result.stdout
+
+
+def test_fetch_csv_no_header_to_file(sample_table, tmp_path: Path):
+    out = tmp_path / "out.csv"
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--no-header", "--out", str(out)])
+    assert result.exit_code == 0, result.stderr
+    text = out.read_text()
+    assert "timestamp" not in text
+    assert "21.66" in text
+
+
+@pytest.mark.parametrize("fmt", ["ndjson", "json", "parquet"])
+def test_fetch_no_header_rejected_with_non_csv(fmt, tmp_path: Path):
+    """--no-header only makes sense for CSV; combining with another format exits 2."""
+    args = ["fetch", "T", "--no-header", "--format", fmt]
+    if fmt == "parquet":
+        args += ["--out", str(tmp_path / "x.pq")]
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(app, args)
+    assert result.exit_code == 2
+    assert "--no-header" in result.stderr
+    client_cls.assert_not_called()
+
+
+def test_write_csv_no_header_to_buffer(sample_table):
+    """_write with include_header=False omits the CSV header row."""
+    import io
+
+    from nwd_dataquery.cli import OutputFormat, _write
+
+    buf = io.BytesIO()
+    with patch("sys.stdout") as mock_stdout:
+        mock_stdout.buffer = buf
+        _write(sample_table, OutputFormat.csv, None, include_header=False)
+
+    text = buf.getvalue().decode()
+    assert "timestamp" not in text  # no header row
+    assert "21.66" in text
 
 
 def _table_from_rows(rows: list[tuple[str, str, float]]) -> pa.Table:

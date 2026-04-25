@@ -107,13 +107,31 @@ def fetch(
         Path | None,
         typer.Option("--out", "-o", help="Output file. Required for parquet."),
     ] = None,
+    no_header: Annotated[
+        bool,
+        typer.Option(
+            "--no-header",
+            help="Omit the CSV header row. CSV output only.",
+        ),
+    ] = False,
     timeout: Annotated[float, typer.Option(help="HTTP timeout (seconds).")] = 60.0,
     endpoint: Annotated[
         str | None, typer.Option(help="Override the Dataquery 2.0 endpoint URL.")
     ] = None,
     quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
     verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Debug logging.")] = False,
-    strict: Annotated[bool, typer.Option("--strict", help="Exit 3 on empty result.")] = False,
+    fail_empty: Annotated[
+        bool,
+        typer.Option("--fail-empty", help="Exit 3 when the result is empty."),
+    ] = False,
+    strict: Annotated[
+        bool,
+        typer.Option(
+            "--strict",
+            hidden=True,
+            help="(deprecated) Use --fail-empty instead.",
+        ),
+    ] = False,
     latest: Annotated[
         bool,
         typer.Option("--latest", help="Keep only the most recent row per tsid."),
@@ -122,6 +140,14 @@ def fetch(
     """Fetch observations for one or more tsids."""
     if fmt == OutputFormat.parquet and out is None:
         typer.secho("error: --format parquet requires --out PATH", fg="red", err=True)
+        raise typer.Exit(code=2)
+
+    if no_header and fmt != OutputFormat.csv:
+        typer.secho(
+            f"error: --no-header only applies to --format csv (got {fmt.value})",
+            fg="red",
+            err=True,
+        )
         raise typer.Exit(code=2)
 
     try:
@@ -164,10 +190,16 @@ def fetch(
     if latest:
         table = _latest_per_tsid(table)
 
-    if strict and table.num_rows == 0:
+    if strict and not quiet:
+        typer.secho(
+            "warning: --strict is deprecated; use --fail-empty instead.",
+            fg="yellow",
+            err=True,
+        )
+    if (fail_empty or strict) and table.num_rows == 0:
         raise typer.Exit(code=3)
 
-    _write(table, fmt, out)
+    _write(table, fmt, out, include_header=not no_header)
 
 
 def _latest_per_tsid(table: pa.Table) -> pa.Table:
@@ -290,16 +322,23 @@ def raw(
         typer.echo(text)
 
 
-def _write(table: pa.Table, fmt: OutputFormat | str, out: Path | None) -> None:
+def _write(
+    table: pa.Table,
+    fmt: OutputFormat | str,
+    out: Path | None,
+    *,
+    include_header: bool = True,
+) -> None:
     if fmt == OutputFormat.csv:
         import pyarrow.csv as pa_csv
 
+        write_options = pa_csv.WriteOptions(include_header=include_header)
         if out is not None:
             with out.open("wb") as f:
-                pa_csv.write_csv(table, f)
+                pa_csv.write_csv(table, f, write_options)
         else:
             buf = io.BytesIO()
-            pa_csv.write_csv(table, buf)
+            pa_csv.write_csv(table, buf, write_options)
             sys.stdout.buffer.write(buf.getvalue())
     elif fmt in (OutputFormat.ndjson, OutputFormat.json):
         # NDJSON: one object per row. `json` is currently an alias.
