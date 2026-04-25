@@ -173,7 +173,35 @@ def test_fetch_json_to_file(sample_table, tmp_path: Path):
     assert "21.66" not in result.stdout  # did not also print to stdout
 
 
-def test_fetch_strict_exits_3_on_empty():
+def test_fetch_fail_empty_exits_3_on_empty():
+    """--fail-empty is the new canonical name for the empty-result exit-3 contract."""
+    empty = pa.schema(
+        [
+            pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+            pa.field("value", pa.float64()),
+            pa.field("quality", pa.int64()),
+            pa.field("tsid", pa.string()),
+            pa.field("location", pa.string()),
+            pa.field("parameter", pa.string()),
+            pa.field("units", pa.string()),
+        ]
+    ).empty_table()
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=empty),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--fail-empty"])
+    assert result.exit_code == 3
+
+
+def test_fetch_strict_still_works_but_warns():
+    """--strict is preserved for one release; emits a deprecation warning to stderr."""
     empty = pa.schema(
         [
             pa.field("timestamp", pa.timestamp("us", tz="UTC")),
@@ -197,6 +225,8 @@ def test_fetch_strict_exits_3_on_empty():
     ):
         result = runner.invoke(app, ["fetch", "T", "--strict"])
     assert result.exit_code == 3
+    assert "deprecated" in result.stderr.lower()
+    assert "--fail-empty" in result.stderr
 
 
 def test_raw_emits_pretty_json_to_stdout():

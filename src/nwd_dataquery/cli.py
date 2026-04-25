@@ -120,7 +120,18 @@ def fetch(
     ] = None,
     quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
     verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Debug logging.")] = False,
-    strict: Annotated[bool, typer.Option("--strict", help="Exit 3 on empty result.")] = False,
+    fail_empty: Annotated[
+        bool,
+        typer.Option("--fail-empty", help="Exit 3 when the result is empty."),
+    ] = False,
+    strict: Annotated[
+        bool,
+        typer.Option(
+            "--strict",
+            hidden=True,
+            help="(deprecated) Use --fail-empty instead.",
+        ),
+    ] = False,
     latest: Annotated[
         bool,
         typer.Option("--latest", help="Keep only the most recent row per tsid."),
@@ -179,7 +190,13 @@ def fetch(
     if latest:
         table = _latest_per_tsid(table)
 
-    if strict and table.num_rows == 0:
+    if strict:
+        typer.secho(
+            "warning: --strict is deprecated; use --fail-empty instead.",
+            fg="yellow",
+            err=True,
+        )
+    if (fail_empty or strict) and table.num_rows == 0:
         raise typer.Exit(code=3)
 
     _write(table, fmt, out, include_header=not no_header)
