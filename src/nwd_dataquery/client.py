@@ -102,6 +102,8 @@ class AsyncDataQueryClient:
             start = end - lookback
         elif start is None and end is not None:
             start = end - lookback
+        elif start is not None and end is None:
+            end = datetime.now(UTC)
 
         params: dict[str, str] = {
             "timezone": self.timezone,
