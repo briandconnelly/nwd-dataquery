@@ -31,6 +31,14 @@ def sample_table() -> pa.Table:
     )
 
 
+def test_version_flag_prints_version():
+    from nwd_dataquery import __version__
+
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0, result.stderr
+    assert result.stdout.strip() == f"nwd-dq {__version__}"
+
+
 def test_parse_duration_days():
     from datetime import timedelta
 

@@ -17,6 +17,7 @@ import pyarrow.csv as pa_csv
 import pyarrow.parquet as pa_pq
 import typer
 
+from . import __version__
 from .client import ENDPOINT, AsyncDataQueryClient
 
 app = typer.Typer(
@@ -25,6 +26,28 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"nwd-dq {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            help="Show the nwd-dq version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
+    """USACE NWD Dataquery 2.0 CLI."""
+
 
 _DURATION_RE = re.compile(r"^\s*(\d+)\s*([yMwdhm])\s*$")
 _DURATION_UNITS = {

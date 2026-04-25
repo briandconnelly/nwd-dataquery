@@ -1,3 +1,5 @@
+from importlib.metadata import version as _pkg_version
+
 import nwd_dataquery
 from nwd_dataquery import (
     AsyncDataQueryClient,
@@ -15,7 +17,7 @@ def test_public_exports_are_available():
 
 def test_version_is_defined():
     assert isinstance(__version__, str)
-    assert __version__ == "0.2.0"
+    assert __version__ == _pkg_version("nwd-dataquery")
 
 
 def test_all_contains_expected_names():
