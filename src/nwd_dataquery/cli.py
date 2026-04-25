@@ -93,7 +93,15 @@ def fetch(
         datetime | None,
         typer.Option(help="ISO-8601 end.", formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"]),
     ] = None,
-    lookback: Annotated[str, typer.Option(help="Relative lookback (e.g. 7d, 10y).")] = "7d",
+    lookback: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                "Window length when --start and/or --end is omitted (e.g. 7d, 48h, 10y). "
+                "Default: 7d. Rejected when both --start and --end are given."
+            ),
+        ),
+    ] = None,
     timezone: Annotated[str, typer.Option(help="Server timezone bucketing.")] = "GMT",
     fmt: Annotated[
         OutputFormat,
@@ -150,8 +158,16 @@ def fetch(
         )
         raise typer.Exit(code=2)
 
+    if start is not None and end is not None and lookback is not None:
+        typer.secho(
+            "error: --lookback cannot be combined with both --start and --end",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
     try:
-        lb = parse_duration(lookback)
+        lb = parse_duration(lookback) if lookback is not None else None
     except ValueError as exc:
         typer.secho(f"error: {exc}", fg="red", err=True)
         raise typer.Exit(code=2) from exc
@@ -222,14 +238,30 @@ def describe(
     tsids: Annotated[list[str], typer.Argument(help="One or more CWMS tsids.")],
     start: Annotated[datetime | None, typer.Option()] = None,
     end: Annotated[datetime | None, typer.Option()] = None,
-    lookback: Annotated[str, typer.Option()] = "7d",
+    lookback: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                "Window length when --start and/or --end is omitted (e.g. 7d, 48h, 10y). "
+                "Default: 7d. Rejected when both --start and --end are given."
+            ),
+        ),
+    ] = None,
     timezone: Annotated[str, typer.Option()] = "GMT",
     timeout: Annotated[float, typer.Option()] = 60.0,
     endpoint: Annotated[str | None, typer.Option()] = None,
 ) -> None:
     """Emit location + tsid metadata as JSON (no values)."""
+    if start is not None and end is not None and lookback is not None:
+        typer.secho(
+            "error: --lookback cannot be combined with both --start and --end",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
     try:
-        lb = parse_duration(lookback)
+        lb = parse_duration(lookback) if lookback is not None else None
     except ValueError as exc:
         typer.secho(f"error: {exc}", fg="red", err=True)
         raise typer.Exit(code=2) from exc

@@ -88,7 +88,7 @@ class AsyncDataQueryClient:
         *,
         start: datetime | None = None,
         end: datetime | None = None,
-        lookback: timedelta = DEFAULT_LOOKBACK,
+        lookback: timedelta | None = None,
     ) -> dict[str, Any]:
         """Return the raw JSON payload for the given tsid(s)."""
         if isinstance(tsids, str):
@@ -96,6 +96,11 @@ class AsyncDataQueryClient:
         tsids = list(tsids)
         if not tsids:
             raise ValueError("must provide at least one tsid")
+
+        if start is not None and end is not None and lookback is not None:
+            raise ValueError("lookback cannot be combined with both start and end")
+        if lookback is None:
+            lookback = DEFAULT_LOOKBACK
 
         if start is None and end is None:
             end = datetime.now(UTC)
@@ -152,7 +157,7 @@ class AsyncDataQueryClient:
         *,
         start: datetime | None = None,
         end: datetime | None = None,
-        lookback: timedelta = DEFAULT_LOOKBACK,
+        lookback: timedelta | None = None,
         backend: Literal["pyarrow", "polars", "pandas"] = "pyarrow",
     ) -> Any:
         """Return a long-format frame in the requested backend.
@@ -182,7 +187,7 @@ class AsyncDataQueryClient:
         *,
         start: datetime | None = None,
         end: datetime | None = None,
-        lookback: timedelta = DEFAULT_LOOKBACK,
+        lookback: timedelta | None = None,
     ) -> dict[str, Any]:
         """Return location + tsid metadata without the time series values."""
         payload = await self.fetch_raw(tsids, start=start, end=end, lookback=lookback)

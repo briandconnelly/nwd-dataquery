@@ -606,6 +606,46 @@ def test_fetch_no_header_rejected_with_non_csv(fmt, tmp_path: Path):
     client_cls.assert_not_called()
 
 
+def test_fetch_lookback_with_both_endpoints_exits_2():
+    """Explicit --lookback alongside both --start and --end is an argument error."""
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(
+            app,
+            [
+                "fetch",
+                "T",
+                "--start",
+                "2026-04-01",
+                "--end",
+                "2026-04-08",
+                "--lookback",
+                "30d",
+            ],
+        )
+    assert result.exit_code == 2
+    assert "--lookback" in result.stderr
+    client_cls.assert_not_called()
+
+
+def test_fetch_no_lookback_with_both_endpoints_is_fine(sample_table):
+    """Without explicit --lookback, both --start and --end is the canonical happy path."""
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["fetch", "T", "--start", "2026-04-01", "--end", "2026-04-08"],
+        )
+    assert result.exit_code == 0, result.stderr
+
+
 def test_write_csv_no_header_to_buffer(sample_table):
     """_write with include_header=False omits the CSV header row."""
     import io

@@ -269,6 +269,19 @@ async def test_describe_returns_metadata_without_values():
 # --- coverage gap tests ---
 
 
+async def test_fetch_raw_rejects_overspecified_window():
+    """fetch_raw raises ValueError when start, end, AND lookback are all explicitly given."""
+    client = _mock_client(lambda req: httpx.Response(200, json={}))
+    with pytest.raises(ValueError, match="lookback"):
+        await client.fetch_raw(
+            "T",
+            start=datetime(2026, 1, 1, tzinfo=UTC),
+            end=datetime(2026, 1, 8, tzinfo=UTC),
+            lookback=timedelta(days=3),
+        )
+    await client.aclose()
+
+
 async def test_fetch_raw_start_none_end_provided():
     """client.py:80 — start=None, end provided → start = end - lookback."""
     captured = {}
