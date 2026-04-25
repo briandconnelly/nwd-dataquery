@@ -18,6 +18,7 @@ def _stub_aia_chaser(request, monkeypatch):
     via the `live` marker.
     """
     if request.node.get_closest_marker("live"):
+        yield
         return
 
     from nwd_dataquery import client as client_mod
