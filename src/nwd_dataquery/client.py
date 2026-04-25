@@ -121,14 +121,18 @@ class AsyncDataQueryClient:
             response.raise_for_status()
             raise
 
+        # Server-reported errors carry an actionable message; surface those
+        # before raising for HTTP status so the message isn't lost behind a
+        # generic 5xx.
         if isinstance(payload, dict) and "error" in payload:
             raise DataQueryError(payload["error"])
+
+        response.raise_for_status()
+
         if not isinstance(payload, dict):
             raise DataQueryError(
                 f"unexpected response payload: expected JSON object, got {type(payload).__name__}"
             )
-
-        response.raise_for_status()
 
         if not payload:
             warnings.warn(

@@ -326,13 +326,37 @@ async def test_fetch_raw_raises_on_non_dict_payload(body_bytes, type_name):
 
 
 async def test_fetch_raw_http_error_takes_precedence_over_json_decode_error():
-    """4xx with non-JSON body should surface the HTTP error, not a JSON decode error."""
+    """5xx with non-JSON body should surface the HTTP error, not a JSON decode error."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, content=b"not json")
 
     client = _mock_client(handler)
     with pytest.raises(httpx.HTTPStatusError):
+        await client.fetch_raw("T")
+    await client.aclose()
+
+
+async def test_fetch_raw_http_error_takes_precedence_over_shape_violation():
+    """5xx with a non-dict JSON body raises HTTPStatusError, not DataQueryError."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, content=b"[1, 2, 3]")
+
+    client = _mock_client(handler)
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.fetch_raw("T")
+    await client.aclose()
+
+
+async def test_fetch_raw_5xx_with_error_body_still_surfaces_data_query_error():
+    """A non-2xx response carrying {"error": ...} keeps the actionable message."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": "Service unavailable"})
+
+    client = _mock_client(handler)
+    with pytest.raises(DataQueryError, match="Service unavailable"):
         await client.fetch_raw("T")
     await client.aclose()
 
