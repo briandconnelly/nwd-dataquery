@@ -8,6 +8,7 @@ import json
 import re
 import sys
 from datetime import datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -48,6 +49,15 @@ def main(
     """USACE NWD Dataquery 2.0 CLI."""
 
 
+class OutputFormat(StrEnum):
+    """Supported `--format` values for `nwd-dq fetch`."""
+
+    csv = "csv"
+    ndjson = "ndjson"
+    json = "json"  # alias for ndjson; reserved for a future single-document JSON format
+    parquet = "parquet"
+
+
 _DURATION_RE = re.compile(r"^\s*(\d+)\s*([yMwdhm])\s*$")
 _DURATION_UNITS = {
     "y": lambda n: timedelta(days=365 * n),
@@ -85,7 +95,14 @@ def fetch(
     ] = None,
     lookback: Annotated[str, typer.Option(help="Relative lookback (e.g. 7d, 10y).")] = "7d",
     timezone: Annotated[str, typer.Option(help="Server timezone bucketing.")] = "GMT",
-    fmt: Annotated[str, typer.Option("--format", "-f", help="csv | json | parquet")] = "csv",
+    fmt: Annotated[
+        OutputFormat,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Output format. `json` is an alias for `ndjson` (newline-delimited).",
+        ),
+    ] = OutputFormat.csv,
     out: Annotated[
         Path | None,
         typer.Option("--out", "-o", help="Output file. Required for parquet."),
@@ -103,7 +120,7 @@ def fetch(
     ] = False,
 ) -> None:
     """Fetch observations for one or more tsids."""
-    if fmt == "parquet" and out is None:
+    if fmt is OutputFormat.parquet and out is None:
         typer.secho("error: --format parquet requires --out PATH", fg="red", err=True)
         raise typer.Exit(code=2)
 
@@ -273,8 +290,8 @@ def raw(
         typer.echo(text)
 
 
-def _write(table: pa.Table, fmt: str, out: Path | None) -> None:
-    if fmt == "csv":
+def _write(table: pa.Table, fmt: OutputFormat | str, out: Path | None) -> None:
+    if fmt == OutputFormat.csv:
         import pyarrow.csv as pa_csv
 
         if out is not None:
@@ -284,8 +301,8 @@ def _write(table: pa.Table, fmt: str, out: Path | None) -> None:
             buf = io.BytesIO()
             pa_csv.write_csv(table, buf)
             sys.stdout.buffer.write(buf.getvalue())
-    elif fmt == "json":
-        # NDJSON: one object per row
+    elif fmt in (OutputFormat.ndjson, OutputFormat.json):
+        # NDJSON: one object per row. `json` is currently an alias.
         sink = out.open("w") if out is not None else sys.stdout
         try:
             for batch in table.to_batches():
@@ -299,7 +316,7 @@ def _write(table: pa.Table, fmt: str, out: Path | None) -> None:
         finally:
             if out is not None:
                 sink.close()
-    elif fmt == "parquet":
+    elif fmt == OutputFormat.parquet:
         import pyarrow.parquet as pa_pq
 
         if out is None:
