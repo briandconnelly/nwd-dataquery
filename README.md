@@ -19,7 +19,7 @@ Python ≥3.12.
 
 ### A note on SSL
 
-Importing `nwd_dataquery` calls `truststore.inject_into_ssl()` to use the OS trust store. USACE `.mil` domains often can't be validated with certifi's bundle on Python installs from `uv`/official installers. If you have strong reasons not to touch the global SSL stack, don't import this package.
+The USACE host serves only the leaf certificate, omitting the DigiCert intermediate. Python's stdlib `ssl` doesn't perform AIA chasing, so default verification fails (`unable to get local issuer certificate`) on any platform whose TLS stack doesn't fetch missing intermediates on its own. The client transparently fetches the intermediate via the leaf's AIA extension (using [`aia-chaser`](https://pypi.org/project/aia-chaser/)) the first time a session is opened to an HTTPS endpoint, and reuses the resulting `SSLContext` thereafter. No global SSL stack mutation occurs on import.
 
 ### Alternate endpoint
 
