@@ -200,6 +200,35 @@ def test_fetch_fail_empty_exits_3_on_empty():
     assert result.exit_code == 3
 
 
+def test_fetch_strict_quiet_suppresses_deprecation_warning():
+    """--quiet ('Suppress warnings') silences the --strict deprecation message."""
+    empty = pa.schema(
+        [
+            pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+            pa.field("value", pa.float64()),
+            pa.field("quality", pa.int64()),
+            pa.field("tsid", pa.string()),
+            pa.field("location", pa.string()),
+            pa.field("parameter", pa.string()),
+            pa.field("units", pa.string()),
+        ]
+    ).empty_table()
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=empty),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--strict", "--quiet"])
+    assert result.exit_code == 3  # exit-3 contract still honored
+    assert "deprecated" not in result.stderr.lower()
+    assert result.stderr == ""
+
+
 def test_fetch_strict_still_works_but_warns():
     """--strict is preserved for one release; emits a deprecation warning to stderr."""
     empty = pa.schema(

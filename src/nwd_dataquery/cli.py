@@ -190,7 +190,7 @@ def fetch(
     if latest:
         table = _latest_per_tsid(table)
 
-    if strict:
+    if strict and not quiet:
         typer.secho(
             "warning: --strict is deprecated; use --fail-empty instead.",
             fg="yellow",
