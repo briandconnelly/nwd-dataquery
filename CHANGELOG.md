@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `nwd-dq fetch --no-header` to omit the CSV header row (CSV-only; combining with `--format ndjson`/`json`/`parquet` exits 2).
+- `nwd-dq fetch --fail-empty` as the new canonical name for the empty-result exit-3 contract.
+
+### Deprecated
+
+- `nwd-dq fetch --strict` is deprecated in favor of `--fail-empty`. It still works and still exits 3 on empty, but now prints a one-line deprecation warning to stderr. It will be removed in a future release.
+
 ## [0.2.0] - 2026-04-25
 
 ### Changed
