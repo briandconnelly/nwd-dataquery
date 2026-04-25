@@ -68,12 +68,15 @@ df  = await client.fetch(tsid, backend="pandas")  # requires nwd-dataquery[panda
 nwd-dq fetch LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW --lookback 30d
 nwd-dq fetch LWSC.Flow-In.Ave.~1Day.1Day.CENWS-COMPUTED-RAW \
     --start 2016-01-01 --format parquet --out flows.pq
+nwd-dq fetch LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW --format ndjson | jq -s .
 nwd-dq describe LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW | jq
 nwd-dq raw LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW --lookback 1d  # raw upstream JSON
 nwd-dq --version
 ```
 
-Exit codes: `0` success, `1` transport error, `2` server/data-query error, `3` empty result with `--strict`.
+`--format` accepts `csv`, `ndjson` (newline-delimited rows), `parquet`, and `json` (a back-compat alias for `ndjson`; the name is reserved for a future single-document JSON format). Invalid values exit 2 before any request is made.
+
+Exit codes: `0` success, `1` transport error, `2` server/data-query error or invalid CLI argument, `3` empty result with `--strict`.
 
 ## Output schema
 

@@ -70,7 +70,8 @@ def test_fetch_csv_to_stdout(sample_table):
     assert "21.66" in result.stdout
 
 
-def test_fetch_json_ndjson_to_stdout(sample_table):
+@pytest.mark.parametrize("fmt", ["json", "ndjson"])
+def test_fetch_ndjson_aliases_to_stdout(sample_table, fmt):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
@@ -81,14 +82,21 @@ def test_fetch_json_ndjson_to_stdout(sample_table):
             new=AsyncMock(return_value=None),
         ),
     ):
-        result = runner.invoke(app, ["fetch", "T", "--format", "json"])
+        result = runner.invoke(app, ["fetch", "T", "--format", fmt])
     assert result.exit_code == 0
-    # One JSON object per line
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["value"] == 21.66
     assert record["tsid"] == "T"
+
+
+def test_fetch_invalid_format_exits_before_request():
+    """`--format jsn` must exit code 2 without constructing the client."""
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(app, ["fetch", "T", "--format", "jsn"])
+    assert result.exit_code == 2
+    client_cls.assert_not_called()
 
 
 def test_fetch_parquet_requires_out(sample_table):
