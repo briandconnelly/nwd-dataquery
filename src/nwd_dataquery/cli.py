@@ -207,6 +207,72 @@ def describe(
     typer.echo(json.dumps(meta, indent=2, default=str))
 
 
+@app.command()
+def raw(
+    tsids: Annotated[list[str], typer.Argument(help="One or more CWMS tsids.")],
+    start: Annotated[
+        datetime | None,
+        typer.Option(
+            help="ISO-8601 start (UTC if no offset).",
+            formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
+        ),
+    ] = None,
+    end: Annotated[
+        datetime | None,
+        typer.Option(help="ISO-8601 end.", formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"]),
+    ] = None,
+    lookback: Annotated[str, typer.Option(help="Relative lookback (e.g. 7d, 10y).")] = "7d",
+    timezone: Annotated[str, typer.Option(help="Server timezone bucketing.")] = "GMT",
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", "-o", help="Output file. Defaults to stdout."),
+    ] = None,
+    timeout: Annotated[float, typer.Option(help="HTTP timeout (seconds).")] = 60.0,
+    endpoint: Annotated[
+        str | None, typer.Option(help="Override the Dataquery 2.0 endpoint URL.")
+    ] = None,
+    quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
+) -> None:
+    """Print the raw upstream JSON payload for one or more tsids."""
+    try:
+        lb = parse_duration(lookback)
+    except ValueError as exc:
+        typer.secho(f"error: {exc}", fg="red", err=True)
+        raise typer.Exit(code=2) from exc
+
+    if quiet:
+        import warnings
+
+        from .errors import UnknownTsidWarning
+
+        warnings.simplefilter("ignore", UnknownTsidWarning)
+
+    async def _run() -> dict:
+        async with AsyncDataQueryClient(
+            timeout=timeout,
+            timezone=timezone,
+            endpoint=endpoint or ENDPOINT,
+        ) as client:
+            return await client.fetch_raw(tsids, start=start, end=end, lookback=lb)
+
+    try:
+        payload = asyncio.run(_run())
+    except Exception as exc:
+        from .errors import DataQueryError
+
+        if isinstance(exc, DataQueryError):
+            typer.secho(f"server error: {exc}", fg="red", err=True)
+            raise typer.Exit(code=2) from exc
+        typer.secho(f"error: {exc}", fg="red", err=True)
+        raise typer.Exit(code=1) from exc
+
+    text = json.dumps(payload, indent=2, default=str)
+    if out is not None:
+        out.write_text(text + "\n")
+    else:
+        typer.echo(text)
+
+
 def _write(table: pa.Table, fmt: str, out: Path | None) -> None:
     if fmt == "csv":
         import pyarrow.csv as pa_csv
