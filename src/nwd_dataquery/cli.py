@@ -120,7 +120,7 @@ def fetch(
     ] = False,
 ) -> None:
     """Fetch observations for one or more tsids."""
-    if fmt is OutputFormat.parquet and out is None:
+    if fmt == OutputFormat.parquet and out is None:
         typer.secho("error: --format parquet requires --out PATH", fg="red", err=True)
         raise typer.Exit(code=2)
 

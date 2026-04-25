@@ -93,11 +93,10 @@ def test_fetch_ndjson_aliases_to_stdout(sample_table, fmt):
 
 def test_fetch_invalid_format_exits_before_request():
     """`--format jsn` must exit code 2 without constructing the client."""
-    fetch_mock = AsyncMock(side_effect=AssertionError("fetch should not be reached"))
-    with patch("nwd_dataquery.cli.AsyncDataQueryClient.fetch", new=fetch_mock):
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
         result = runner.invoke(app, ["fetch", "T", "--format", "jsn"])
     assert result.exit_code == 2
-    fetch_mock.assert_not_called()
+    client_cls.assert_not_called()
 
 
 def test_fetch_parquet_requires_out(sample_table):
