@@ -107,6 +107,13 @@ def fetch(
         Path | None,
         typer.Option("--out", "-o", help="Output file. Required for parquet."),
     ] = None,
+    no_header: Annotated[
+        bool,
+        typer.Option(
+            "--no-header",
+            help="Omit the CSV header row. CSV output only.",
+        ),
+    ] = False,
     timeout: Annotated[float, typer.Option(help="HTTP timeout (seconds).")] = 60.0,
     endpoint: Annotated[
         str | None, typer.Option(help="Override the Dataquery 2.0 endpoint URL.")
@@ -122,6 +129,14 @@ def fetch(
     """Fetch observations for one or more tsids."""
     if fmt == OutputFormat.parquet and out is None:
         typer.secho("error: --format parquet requires --out PATH", fg="red", err=True)
+        raise typer.Exit(code=2)
+
+    if no_header and fmt != OutputFormat.csv:
+        typer.secho(
+            f"error: --no-header only applies to --format csv (got {fmt.value})",
+            fg="red",
+            err=True,
+        )
         raise typer.Exit(code=2)
 
     try:
@@ -167,7 +182,7 @@ def fetch(
     if strict and table.num_rows == 0:
         raise typer.Exit(code=3)
 
-    _write(table, fmt, out)
+    _write(table, fmt, out, include_header=not no_header)
 
 
 def _latest_per_tsid(table: pa.Table) -> pa.Table:
