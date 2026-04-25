@@ -9,15 +9,15 @@ import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
-import pyarrow as pa
-import pyarrow.compute as pc
-import pyarrow.csv as pa_csv
-import pyarrow.parquet as pa_pq
 import typer
 
+from . import __version__
 from .client import ENDPOINT, AsyncDataQueryClient
+
+if TYPE_CHECKING:
+    import pyarrow as pa
 
 app = typer.Typer(
     name="nwd-dq",
@@ -25,6 +25,28 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"nwd-dq {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            help="Show the nwd-dq version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
+    """USACE NWD Dataquery 2.0 CLI."""
+
 
 _DURATION_RE = re.compile(r"^\s*(\d+)\s*([yMwdhm])\s*$")
 _DURATION_UNITS = {
@@ -132,6 +154,8 @@ def fetch(
 
 
 def _latest_per_tsid(table: pa.Table) -> pa.Table:
+    import pyarrow.compute as pc
+
     if table.num_rows == 0:
         return table
     order = pc.sort_indices(  # ty:ignore[unresolved-attribute]
@@ -185,6 +209,8 @@ def describe(
 
 def _write(table: pa.Table, fmt: str, out: Path | None) -> None:
     if fmt == "csv":
+        import pyarrow.csv as pa_csv
+
         if out is not None:
             with out.open("wb") as f:
                 pa_csv.write_csv(table, f)
@@ -208,6 +234,8 @@ def _write(table: pa.Table, fmt: str, out: Path | None) -> None:
             if out is not None:
                 sink.close()
     elif fmt == "parquet":
+        import pyarrow.parquet as pa_pq
+
         if out is None:
             raise ValueError("parquet output requires a file path")
         pa_pq.write_table(table, out)
