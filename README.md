@@ -1,7 +1,10 @@
 # nwd-dataquery
 
-[![CI](https://github.com/briandconnelly/nwd-dataquery/actions/workflows/ci.yml/badge.svg)](https://github.com/briandconnelly/nwd-dataquery/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/nwd-dataquery.svg)](https://pypi.org/project/nwd-dataquery/)
+[![Python versions](https://img.shields.io/pypi/pyversions/nwd-dataquery.svg)](https://pypi.org/project/nwd-dataquery/)
+[![License: MIT](https://img.shields.io/pypi/l/nwd-dataquery.svg)](https://github.com/briandconnelly/nwd-dataquery/blob/main/LICENSE)
+[![CI](https://github.com/briandconnelly/nwd-dataquery/actions/workflows/ci.yml/badge.svg)](https://github.com/briandconnelly/nwd-dataquery/actions/workflows/ci.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 Async Python client for the [USACE Northwestern Division](https://www.nwd.usace.army.mil/) Dataquery 2.0 hydrologic timeseries endpoint.
 
