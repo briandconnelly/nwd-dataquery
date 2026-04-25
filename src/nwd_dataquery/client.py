@@ -113,16 +113,22 @@ class AsyncDataQueryClient:
         session = self._get_or_build_session()
         response = await session.get(self.endpoint, params=params)
 
-        if response.headers.get("content-type", "").startswith("text/plain"):
-            try:
-                body = response.json()
-            except ValueError:
-                body = None
-            if isinstance(body, dict) and "error" in body:
-                raise DataQueryError(body["error"])
+        try:
+            payload = response.json()
+        except ValueError:
+            # Body wasn't JSON at all — let an HTTP error take precedence,
+            # otherwise re-raise the decode failure.
+            response.raise_for_status()
+            raise
+
+        if isinstance(payload, dict) and "error" in payload:
+            raise DataQueryError(payload["error"])
+        if not isinstance(payload, dict):
+            raise DataQueryError(
+                f"unexpected response payload: expected JSON object, got {type(payload).__name__}"
+            )
 
         response.raise_for_status()
-        payload: dict[str, Any] = response.json()
 
         if not payload:
             warnings.warn(

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 
 class DataQueryError(RuntimeError):
-    """Server returned an error response (HTTP 200 with text/plain error body)."""
+    """Server returned an error response or a malformed payload.
+
+    Raised when the upstream body contains a top-level ``"error"`` key
+    (regardless of ``Content-Type``) or when the decoded JSON is not a
+    JSON object.
+    """
 
 
 class UnknownTsidWarning(UserWarning):
