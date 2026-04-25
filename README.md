@@ -131,6 +131,7 @@ uv sync --all-extras --group dev
 prek install
 uv run pytest              # unit + integration (cassettes)
 uv run pytest -m live      # live smoke (requires network)
+uv run mypy                # type-checks src/
 ```
 
 ## License

@@ -17,7 +17,7 @@ import pyarrow.csv as pa_csv
 import pyarrow.parquet as pa_pq
 import typer
 
-from .client import AsyncDataQueryClient
+from .client import ENDPOINT, AsyncDataQueryClient
 
 app = typer.Typer(
     name="nwd-dq",
@@ -104,10 +104,11 @@ def fetch(
         logging.basicConfig(level=logging.DEBUG)
 
     async def _run() -> pa.Table:
-        kwargs: dict[str, object] = {"timeout": timeout, "timezone": timezone}
-        if endpoint:
-            kwargs["endpoint"] = endpoint
-        async with AsyncDataQueryClient(**kwargs) as client:
+        async with AsyncDataQueryClient(
+            timeout=timeout,
+            timezone=timezone,
+            endpoint=endpoint or ENDPOINT,
+        ) as client:
             return await client.fetch(tsids, start=start, end=end, lookback=lb)
 
     try:
@@ -161,10 +162,11 @@ def describe(
         raise typer.Exit(code=2) from exc
 
     async def _run() -> dict:
-        kwargs: dict[str, object] = {"timeout": timeout, "timezone": timezone}
-        if endpoint:
-            kwargs["endpoint"] = endpoint
-        async with AsyncDataQueryClient(**kwargs) as client:
+        async with AsyncDataQueryClient(
+            timeout=timeout,
+            timezone=timezone,
+            endpoint=endpoint or ENDPOINT,
+        ) as client:
             return await client.describe(tsids, start=start, end=end, lookback=lb)
 
     try:
