@@ -337,3 +337,26 @@ async def test_non_https_endpoint_skips_aia_context(monkeypatch):
     client._get_or_build_session()
     assert aia_calls == []
     assert "verify" not in captured
+
+
+async def test_ssl_context_cached_per_origin_not_full_url(monkeypatch):
+    """Different paths on the same host share one SSLContext (cache is by origin)."""
+    from nwd_dataquery import client as client_mod
+
+    fetched_urls: list[str] = []
+
+    class _FakeChaser:
+        def make_ssl_context_for_url(self, url: str) -> object:
+            fetched_urls.append(url)
+            return object()
+
+    monkeypatch.setattr(client_mod, "AiaChaser", _FakeChaser)
+    client_mod._build_ssl_context.cache_clear()
+
+    a = client_mod._ssl_context_for("https://example.com/path/a")
+    b = client_mod._ssl_context_for("https://example.com/path/b?q=1")
+    c = client_mod._ssl_context_for("https://other.example.com/")
+
+    assert a is b  # same origin → same cached context
+    assert a is not c  # different origin → distinct context
+    assert fetched_urls == ["https://example.com", "https://other.example.com"]

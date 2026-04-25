@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from functools import cache
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import httpx
 from aia_chaser import AiaChaser
@@ -23,12 +24,19 @@ ENDPOINT = "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getj
 DEFAULT_LOOKBACK = timedelta(days=7)
 
 
-@cache
 def _ssl_context_for(endpoint: str) -> ssl.SSLContext:
     # USACE serves the leaf cert without the DigiCert intermediate, so Python's
     # ssl module can't build a chain on its own. Fetch the intermediate via the
-    # leaf's AIA extension once per endpoint and cache the resulting context.
-    return AiaChaser().make_ssl_context_for_url(endpoint)
+    # leaf's AIA extension and cache the resulting context per origin
+    # (scheme://host:port) — the path is irrelevant to the TLS handshake, so
+    # different paths on the same host should share one context.
+    parts = urlsplit(endpoint)
+    return _build_ssl_context(f"{parts.scheme}://{parts.netloc}")
+
+
+@cache
+def _build_ssl_context(origin: str) -> ssl.SSLContext:
+    return AiaChaser().make_ssl_context_for_url(origin)
 
 
 class AsyncDataQueryClient:
