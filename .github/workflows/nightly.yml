@@ -5,6 +5,10 @@ on:
     - cron: "0 13 * * *"  # 13:00 UTC daily
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   live:
     runs-on: ubuntu-latest
@@ -16,7 +20,7 @@ jobs:
       - name: Install
         run: uv sync --all-extras --group dev
       - name: Run live tests
-        run: uv run pytest -m live -v
+        run: uv run pytest -m live -v --no-cov
       - name: Open issue on failure
         if: failure()
         uses: actions/github-script@v9

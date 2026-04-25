@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import json
 import logging
+import ssl
 import warnings
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from functools import cache
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import httpx
+from aia_chaser import AiaChaser
 
 from ._parse import parse_payload
 from .errors import DataQueryError, UnknownTsidWarning
@@ -18,6 +22,21 @@ logger = logging.getLogger(__name__)
 
 ENDPOINT = "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson"
 DEFAULT_LOOKBACK = timedelta(days=7)
+
+
+def _ssl_context_for(endpoint: str) -> ssl.SSLContext:
+    # USACE serves the leaf cert without the DigiCert intermediate, so Python's
+    # ssl module can't build a chain on its own. Fetch the intermediate via the
+    # leaf's AIA extension and cache the resulting context per origin
+    # (scheme://host:port) — the path is irrelevant to the TLS handshake, so
+    # different paths on the same host should share one context.
+    parts = urlsplit(endpoint)
+    return _build_ssl_context(f"{parts.scheme}://{parts.netloc}")
+
+
+@cache
+def _build_ssl_context(origin: str) -> ssl.SSLContext:
+    return AiaChaser().make_ssl_context_for_url(origin)
 
 
 class AsyncDataQueryClient:
@@ -55,7 +74,10 @@ class AsyncDataQueryClient:
 
     def _get_or_build_session(self) -> httpx.AsyncClient:
         if self._session is None:
-            self._session = httpx.AsyncClient(timeout=self.timeout)
+            kwargs: dict[str, Any] = {"timeout": self.timeout}
+            if self.endpoint.startswith("https://"):
+                kwargs["verify"] = _ssl_context_for(self.endpoint)
+            self._session = httpx.AsyncClient(**kwargs)
         return self._session
 
     async def fetch_raw(

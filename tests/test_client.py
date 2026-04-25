@@ -286,3 +286,77 @@ async def test_iso_naive_datetime_treated_as_utc():
     naive = datetime(2026, 1, 1)  # no tzinfo
     result = _iso(naive)
     assert result == "2026-01-01T00:00:00Z"
+
+
+async def test_https_endpoint_passes_aia_context_to_session(monkeypatch):
+    """HTTPS endpoints build an AIA-aware SSLContext and pass it to httpx.AsyncClient."""
+    from nwd_dataquery import client as client_mod
+
+    sentinel = object()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(client_mod, "_ssl_context_for", lambda url: sentinel)
+
+    class _FakeAsyncClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def aclose(self) -> None:  # called by aclose()
+            pass
+
+    monkeypatch.setattr(client_mod.httpx, "AsyncClient", _FakeAsyncClient)
+
+    client = AsyncDataQueryClient(endpoint="https://example.com/x")
+    client._get_or_build_session()
+    assert captured["verify"] is sentinel
+
+
+async def test_non_https_endpoint_skips_aia_context(monkeypatch):
+    """Non-HTTPS endpoints must not trigger AIA fetching (would block on bogus URLs)."""
+    from nwd_dataquery import client as client_mod
+
+    aia_calls: list[str] = []
+    captured: dict[str, object] = {}
+
+    def _stub(url: str) -> object:
+        aia_calls.append(url)
+        raise AssertionError("AIA fetch should not be invoked for non-HTTPS endpoints")
+
+    monkeypatch.setattr(client_mod, "_ssl_context_for", _stub)
+
+    class _FakeAsyncClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def aclose(self) -> None:
+            pass
+
+    monkeypatch.setattr(client_mod.httpx, "AsyncClient", _FakeAsyncClient)
+
+    client = AsyncDataQueryClient(endpoint="http://example.invalid/x")
+    client._get_or_build_session()
+    assert aia_calls == []
+    assert "verify" not in captured
+
+
+async def test_ssl_context_cached_per_origin_not_full_url(monkeypatch):
+    """Different paths on the same host share one SSLContext (cache is by origin)."""
+    from nwd_dataquery import client as client_mod
+
+    fetched_urls: list[str] = []
+
+    class _FakeChaser:
+        def make_ssl_context_for_url(self, url: str) -> object:
+            fetched_urls.append(url)
+            return object()
+
+    monkeypatch.setattr(client_mod, "AiaChaser", _FakeChaser)
+    client_mod._build_ssl_context.cache_clear()
+
+    a = client_mod._ssl_context_for("https://example.com/path/a")
+    b = client_mod._ssl_context_for("https://example.com/path/b?q=1")
+    c = client_mod._ssl_context_for("https://other.example.com/")
+
+    assert a is b  # same origin → same cached context
+    assert a is not c  # different origin → distinct context
+    assert fetched_urls == ["https://example.com", "https://other.example.com"]
