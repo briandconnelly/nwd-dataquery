@@ -7,15 +7,17 @@ import io
 import json
 import re
 import sys
+from collections.abc import Callable, Coroutine
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
 from . import __version__
 from .client import ENDPOINT, AsyncDataQueryClient
+from .errors import DataQueryError
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -74,6 +76,36 @@ _DURATION_UNITS = {
     "m": lambda n: timedelta(minutes=n),
 }
 
+WindowStart = Annotated[
+    datetime | None,
+    typer.Option(
+        help="Window start (inclusive). ISO-8601; UTC if no offset. Defaults to (end - lookback).",
+        formats=_DATETIME_FORMATS,
+    ),
+]
+WindowEnd = Annotated[
+    datetime | None,
+    typer.Option(
+        help="Window end (inclusive). ISO-8601; UTC if no offset. Defaults to now.",
+        formats=_DATETIME_FORMATS,
+    ),
+]
+LookbackOpt = Annotated[
+    str | None,
+    typer.Option(
+        help=(
+            "Window length when --start and/or --end is omitted (e.g. 7d, 48h, 10y). "
+            "Default: 7d. Rejected when both --start and --end are given."
+        ),
+    ),
+]
+TimezoneOpt = Annotated[str, typer.Option(help="Server timezone bucketing.")]
+TimeoutOpt = Annotated[float, typer.Option(help="HTTP timeout (seconds).")]
+EndpointOpt = Annotated[
+    str | None,
+    typer.Option(help="Override the Dataquery 2.0 endpoint URL."),
+]
+
 
 def parse_duration(text: str) -> timedelta:
     """Parse simple durations like ``7d``, ``48h``, ``10y``."""
@@ -85,33 +117,32 @@ def parse_duration(text: str) -> timedelta:
     return _DURATION_UNITS[unit](n)
 
 
+def _client(*, timeout: float, timezone: str, endpoint: str | None) -> AsyncDataQueryClient:
+    return AsyncDataQueryClient(
+        timeout=timeout,
+        timezone=timezone,
+        endpoint=endpoint or ENDPOINT,
+    )
+
+
+def _run[T](coro_factory: Callable[[], Coroutine[Any, Any, T]]) -> T:
+    try:
+        return asyncio.run(coro_factory())
+    except DataQueryError as exc:
+        typer.secho(f"server error: {exc}", fg="red", err=True)
+        raise typer.Exit(code=2) from exc
+    except Exception as exc:
+        typer.secho(f"error: {exc}", fg="red", err=True)
+        raise typer.Exit(code=1) from exc
+
+
 @app.command()
 def fetch(
     tsids: Annotated[list[str], typer.Argument(help="One or more CWMS tsids.")],
-    start: Annotated[
-        datetime | None,
-        typer.Option(
-            help="Window start (inclusive). ISO-8601; UTC if no offset. Defaults to (end - lookback).",
-            formats=_DATETIME_FORMATS,
-        ),
-    ] = None,
-    end: Annotated[
-        datetime | None,
-        typer.Option(
-            help="Window end (inclusive). ISO-8601; UTC if no offset. Defaults to now.",
-            formats=_DATETIME_FORMATS,
-        ),
-    ] = None,
-    lookback: Annotated[
-        str | None,
-        typer.Option(
-            help=(
-                "Window length when --start and/or --end is omitted (e.g. 7d, 48h, 10y). "
-                "Default: 7d. Rejected when both --start and --end are given."
-            ),
-        ),
-    ] = None,
-    timezone: Annotated[str, typer.Option(help="Server timezone bucketing.")] = "GMT",
+    start: WindowStart = None,
+    end: WindowEnd = None,
+    lookback: LookbackOpt = None,
+    timezone: TimezoneOpt = "GMT",
     fmt: Annotated[
         OutputFormat,
         typer.Option(
@@ -131,10 +162,8 @@ def fetch(
             help="Omit the CSV header row. CSV output only.",
         ),
     ] = False,
-    timeout: Annotated[float, typer.Option(help="HTTP timeout (seconds).")] = 60.0,
-    endpoint: Annotated[
-        str | None, typer.Option(help="Override the Dataquery 2.0 endpoint URL.")
-    ] = None,
+    timeout: TimeoutOpt = 60.0,
+    endpoint: EndpointOpt = None,
     quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
     verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Debug logging.")] = False,
     fail_empty: Annotated[
@@ -181,24 +210,11 @@ def fetch(
 
         logging.basicConfig(level=logging.DEBUG)
 
-    async def _run() -> pa.Table:
-        async with AsyncDataQueryClient(
-            timeout=timeout,
-            timezone=timezone,
-            endpoint=endpoint or ENDPOINT,
-        ) as client:
+    async def _do() -> pa.Table:
+        async with _client(timeout=timeout, timezone=timezone, endpoint=endpoint) as client:
             return await client.fetch(tsids, start=start, end=end, lookback=lb)
 
-    try:
-        table = asyncio.run(_run())
-    except Exception as exc:  # transport/HTTP errors bubble up
-        from .errors import DataQueryError
-
-        if isinstance(exc, DataQueryError):
-            typer.secho(f"server error: {exc}", fg="red", err=True)
-            raise typer.Exit(code=2) from exc
-        typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=1) from exc
+    table = _run(_do)
 
     if latest:
         table = _latest_per_tsid(table)
@@ -233,54 +249,21 @@ def _latest_per_tsid(table: pa.Table) -> pa.Table:
 @app.command()
 def describe(
     tsids: Annotated[list[str], typer.Argument(help="One or more CWMS tsids.")],
-    start: Annotated[
-        datetime | None,
-        typer.Option(
-            help="Window start (inclusive). ISO-8601; UTC if no offset. Defaults to (end - lookback).",
-            formats=_DATETIME_FORMATS,
-        ),
-    ] = None,
-    end: Annotated[
-        datetime | None,
-        typer.Option(
-            help="Window end (inclusive). ISO-8601; UTC if no offset. Defaults to now.",
-            formats=_DATETIME_FORMATS,
-        ),
-    ] = None,
-    lookback: Annotated[
-        str | None,
-        typer.Option(
-            help=(
-                "Window length when --start and/or --end is omitted (e.g. 7d, 48h, 10y). "
-                "Default: 7d. Rejected when both --start and --end are given."
-            ),
-        ),
-    ] = None,
-    timezone: Annotated[str, typer.Option()] = "GMT",
-    timeout: Annotated[float, typer.Option()] = 60.0,
-    endpoint: Annotated[str | None, typer.Option()] = None,
+    start: WindowStart = None,
+    end: WindowEnd = None,
+    lookback: LookbackOpt = None,
+    timezone: TimezoneOpt = "GMT",
+    timeout: TimeoutOpt = 60.0,
+    endpoint: EndpointOpt = None,
 ) -> None:
     """Emit location + tsid metadata as JSON (no values)."""
     lb = _resolve_window_args(start, end, lookback)
 
-    async def _run() -> dict:
-        async with AsyncDataQueryClient(
-            timeout=timeout,
-            timezone=timezone,
-            endpoint=endpoint or ENDPOINT,
-        ) as client:
+    async def _do() -> dict:
+        async with _client(timeout=timeout, timezone=timezone, endpoint=endpoint) as client:
             return await client.describe(tsids, start=start, end=end, lookback=lb)
 
-    try:
-        meta = asyncio.run(_run())
-    except Exception as exc:
-        from .errors import DataQueryError
-
-        if isinstance(exc, DataQueryError):
-            typer.secho(f"server error: {exc}", fg="red", err=True)
-            raise typer.Exit(code=2) from exc
-        typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=1) from exc
+    meta = _run(_do)
 
     typer.echo(json.dumps(meta, indent=2, default=str))
 
@@ -288,35 +271,16 @@ def describe(
 @app.command()
 def raw(
     tsids: Annotated[list[str], typer.Argument(help="One or more CWMS tsids.")],
-    start: Annotated[
-        datetime | None,
-        typer.Option(
-            help="ISO-8601 start (UTC if no offset).",
-            formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
-        ),
-    ] = None,
-    end: Annotated[
-        datetime | None,
-        typer.Option(help="ISO-8601 end.", formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"]),
-    ] = None,
-    lookback: Annotated[
-        str | None,
-        typer.Option(
-            help=(
-                "Window length when --start and/or --end is omitted (e.g. 7d, 48h, 10y). "
-                "Default: 7d. Rejected when both --start and --end are given."
-            ),
-        ),
-    ] = None,
-    timezone: Annotated[str, typer.Option(help="Server timezone bucketing.")] = "GMT",
+    start: WindowStart = None,
+    end: WindowEnd = None,
+    lookback: LookbackOpt = None,
+    timezone: TimezoneOpt = "GMT",
     out: Annotated[
         Path | None,
         typer.Option("--out", "-o", help="Output file. Defaults to stdout."),
     ] = None,
-    timeout: Annotated[float, typer.Option(help="HTTP timeout (seconds).")] = 60.0,
-    endpoint: Annotated[
-        str | None, typer.Option(help="Override the Dataquery 2.0 endpoint URL.")
-    ] = None,
+    timeout: TimeoutOpt = 60.0,
+    endpoint: EndpointOpt = None,
     quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
 ) -> None:
     """Print the raw upstream JSON payload for one or more tsids."""
@@ -329,24 +293,11 @@ def raw(
 
         warnings.simplefilter("ignore", UnknownTsidWarning)
 
-    async def _run() -> dict:
-        async with AsyncDataQueryClient(
-            timeout=timeout,
-            timezone=timezone,
-            endpoint=endpoint or ENDPOINT,
-        ) as client:
+    async def _do() -> dict:
+        async with _client(timeout=timeout, timezone=timezone, endpoint=endpoint) as client:
             return await client.fetch_raw(tsids, start=start, end=end, lookback=lb)
 
-    try:
-        payload = asyncio.run(_run())
-    except Exception as exc:
-        from .errors import DataQueryError
-
-        if isinstance(exc, DataQueryError):
-            typer.secho(f"server error: {exc}", fg="red", err=True)
-            raise typer.Exit(code=2) from exc
-        typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=1) from exc
+    payload = _run(_do)
 
     text = json.dumps(payload, indent=2, default=str)
     if out is not None:
