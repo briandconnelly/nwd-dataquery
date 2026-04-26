@@ -158,6 +158,14 @@ def fetch(
         )
         raise typer.Exit(code=2)
 
+    if start is not None and end is not None and start > end:
+        typer.secho(
+            f"error: --start ({start.isoformat()}) is after --end ({end.isoformat()})",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
     lb = _resolve_window_args(start, end, lookback)
 
     if quiet:

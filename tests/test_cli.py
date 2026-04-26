@@ -648,6 +648,19 @@ def test_fetch_lookback_with_both_endpoints_exits_2():
     client_cls.assert_not_called()
 
 
+def test_fetch_start_after_end_exits_2_before_request():
+    """--start later than --end is a CLI argument error; client must not be constructed."""
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(
+            app,
+            ["fetch", "T", "--start", "2026-04-25", "--end", "2026-04-01"],
+        )
+    assert result.exit_code == 2
+    assert "--start" in result.stderr
+    assert "--end" in result.stderr
+    client_cls.assert_not_called()
+
+
 def test_fetch_no_lookback_with_both_endpoints_is_fine(sample_table):
     """Without explicit --lookback, both --start and --end is the canonical happy path."""
     with (
