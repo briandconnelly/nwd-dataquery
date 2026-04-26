@@ -118,7 +118,7 @@ class AsyncDataQueryClient:
         # "GMT" is the only request value that produces timestamps consistent
         # with the parser's UTC assumption. The upstream silently falls back to
         # local-sensor time on unknown timezone strings (including "UTC"); see
-        # docs/superpowers/specs/2026-04-26-drop-timezone-knob-design.md.
+        # issue #6 for the live-probe evidence.
         params: dict[str, str] = {
             "timezone": "GMT",
             "query": json.dumps(tsids),
