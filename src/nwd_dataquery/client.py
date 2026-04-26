@@ -103,7 +103,9 @@ class AsyncDataQueryClient:
             start_utc = start.replace(tzinfo=UTC) if start.tzinfo is None else start
             end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end
             if start_utc > end_utc:
-                raise ValueError(f"start ({start.isoformat()}) is after end ({end.isoformat()})")
+                raise ValueError(
+                    f"start ({start_utc.isoformat()}) is after end ({end_utc.isoformat()})"
+                )
         if lookback is None:
             lookback = DEFAULT_LOOKBACK
 
