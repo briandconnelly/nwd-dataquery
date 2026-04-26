@@ -81,7 +81,7 @@ nwd-dq --version
 
 ### Time window
 
-`--start` and `--end` are ISO-8601 (UTC if no offset). `--lookback` is a relative duration like `7d`, `48h`, `10y`. Resolution rules:
+`--start` and `--end` are ISO-8601 (UTC if no offset). `--lookback` is a relative duration like `7d`, `48h`, `10y` (default: `7d`). Resolution rules:
 
 | `--start` | `--end` | window |
 | --- | --- | --- |
@@ -90,7 +90,7 @@ nwd-dq --version
 | given | omitted | `[start, now]` |
 | given | given | `[start, end]` |
 
-Combining explicit `--lookback` with both `--start` and `--end` is rejected with exit 2. `--start` later than `--end` is also rejected with exit 2 before any request is made.
+Both rejections — combining explicit `--lookback` with both `--start` and `--end`, and `--start` later than `--end` — exit 2 before any request is made.
 
 ### Exit codes
 
