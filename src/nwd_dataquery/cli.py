@@ -249,54 +249,21 @@ def _latest_per_tsid(table: pa.Table) -> pa.Table:
 @app.command()
 def describe(
     tsids: Annotated[list[str], typer.Argument(help="One or more CWMS tsids.")],
-    start: Annotated[
-        datetime | None,
-        typer.Option(
-            help="Window start (inclusive). ISO-8601; UTC if no offset. Defaults to (end - lookback).",
-            formats=_DATETIME_FORMATS,
-        ),
-    ] = None,
-    end: Annotated[
-        datetime | None,
-        typer.Option(
-            help="Window end (inclusive). ISO-8601; UTC if no offset. Defaults to now.",
-            formats=_DATETIME_FORMATS,
-        ),
-    ] = None,
-    lookback: Annotated[
-        str | None,
-        typer.Option(
-            help=(
-                "Window length when --start and/or --end is omitted (e.g. 7d, 48h, 10y). "
-                "Default: 7d. Rejected when both --start and --end are given."
-            ),
-        ),
-    ] = None,
-    timezone: Annotated[str, typer.Option()] = "GMT",
-    timeout: Annotated[float, typer.Option()] = 60.0,
-    endpoint: Annotated[str | None, typer.Option()] = None,
+    start: WindowStart = None,
+    end: WindowEnd = None,
+    lookback: LookbackOpt = None,
+    timezone: TimezoneOpt = "GMT",
+    timeout: TimeoutOpt = 60.0,
+    endpoint: EndpointOpt = None,
 ) -> None:
     """Emit location + tsid metadata as JSON (no values)."""
     lb = _resolve_window_args(start, end, lookback)
 
-    async def _run() -> dict:
-        async with AsyncDataQueryClient(
-            timeout=timeout,
-            timezone=timezone,
-            endpoint=endpoint or ENDPOINT,
-        ) as client:
+    async def _do() -> dict:
+        async with _client(timeout=timeout, timezone=timezone, endpoint=endpoint) as client:
             return await client.describe(tsids, start=start, end=end, lookback=lb)
 
-    try:
-        meta = asyncio.run(_run())
-    except Exception as exc:
-        from .errors import DataQueryError
-
-        if isinstance(exc, DataQueryError):
-            typer.secho(f"server error: {exc}", fg="red", err=True)
-            raise typer.Exit(code=2) from exc
-        typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=1) from exc
+    meta = _run(_do)
 
     typer.echo(json.dumps(meta, indent=2, default=str))
 
