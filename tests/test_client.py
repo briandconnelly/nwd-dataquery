@@ -163,6 +163,17 @@ async def test_aclose_without_request_is_noop():
         pass  # no requests made, no session built
 
 
+async def test_async_client_does_not_accept_timezone_kwarg():
+    """The `timezone` kwarg was removed (#6) — passing it must fail loudly.
+
+    This locks the design choice in: a future PR that wants to bring back
+    timezone support has to confront this test deliberately rather than
+    silently re-introducing the surface that produced #6's data corruption.
+    """
+    with pytest.raises(TypeError):
+        AsyncDataQueryClient(timezone="GMT")  # type: ignore[call-arg]
+
+
 def _success_handler(payload):
     def handler(request):
         return httpx.Response(200, json=payload)
