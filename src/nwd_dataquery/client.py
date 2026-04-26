@@ -49,12 +49,10 @@ class AsyncDataQueryClient:
         self,
         *,
         endpoint: str = ENDPOINT,
-        timezone: str = "GMT",
         timeout: float = 60.0,
         session: httpx.AsyncClient | None = None,
     ) -> None:
         self.endpoint = endpoint
-        self.timezone = timezone
         self.timeout = timeout
         self._session = session
         self._owns_session = session is None
@@ -117,8 +115,12 @@ class AsyncDataQueryClient:
         elif start is not None and end is None:
             end = datetime.now(UTC)
 
+        # "GMT" is the only request value that produces timestamps consistent
+        # with the parser's UTC assumption. The upstream silently falls back to
+        # local-sensor time on unknown timezone strings (including "UTC"); see
+        # docs/superpowers/specs/2026-04-26-drop-timezone-knob-design.md.
         params: dict[str, str] = {
-            "timezone": self.timezone,
+            "timezone": "GMT",
             "query": json.dumps(tsids),
         }
         if start is not None:

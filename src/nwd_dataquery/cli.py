@@ -99,7 +99,6 @@ LookbackOpt = Annotated[
         ),
     ),
 ]
-TimezoneOpt = Annotated[str, typer.Option(help="Server timezone bucketing.")]
 TimeoutOpt = Annotated[float, typer.Option(help="HTTP timeout (seconds).")]
 EndpointOpt = Annotated[
     str | None,
@@ -117,10 +116,9 @@ def parse_duration(text: str) -> timedelta:
     return _DURATION_UNITS[unit](n)
 
 
-def _client(*, timeout: float, timezone: str, endpoint: str | None) -> AsyncDataQueryClient:
+def _client(*, timeout: float, endpoint: str | None) -> AsyncDataQueryClient:
     return AsyncDataQueryClient(
         timeout=timeout,
-        timezone=timezone,
         endpoint=endpoint or ENDPOINT,
     )
 
@@ -142,7 +140,6 @@ def fetch(
     start: WindowStart = None,
     end: WindowEnd = None,
     lookback: LookbackOpt = None,
-    timezone: TimezoneOpt = "GMT",
     fmt: Annotated[
         OutputFormat,
         typer.Option(
@@ -211,7 +208,7 @@ def fetch(
         logging.basicConfig(level=logging.DEBUG)
 
     async def _do() -> pa.Table:
-        async with _client(timeout=timeout, timezone=timezone, endpoint=endpoint) as client:
+        async with _client(timeout=timeout, endpoint=endpoint) as client:
             return await client.fetch(tsids, start=start, end=end, lookback=lb)
 
     table = _run(_do)
@@ -252,7 +249,6 @@ def describe(
     start: WindowStart = None,
     end: WindowEnd = None,
     lookback: LookbackOpt = None,
-    timezone: TimezoneOpt = "GMT",
     timeout: TimeoutOpt = 60.0,
     endpoint: EndpointOpt = None,
 ) -> None:
@@ -260,7 +256,7 @@ def describe(
     lb = _resolve_window_args(start, end, lookback)
 
     async def _do() -> dict:
-        async with _client(timeout=timeout, timezone=timezone, endpoint=endpoint) as client:
+        async with _client(timeout=timeout, endpoint=endpoint) as client:
             return await client.describe(tsids, start=start, end=end, lookback=lb)
 
     meta = _run(_do)
@@ -274,7 +270,6 @@ def raw(
     start: WindowStart = None,
     end: WindowEnd = None,
     lookback: LookbackOpt = None,
-    timezone: TimezoneOpt = "GMT",
     out: Annotated[
         Path | None,
         typer.Option("--out", "-o", help="Output file. Defaults to stdout."),
@@ -294,7 +289,7 @@ def raw(
         warnings.simplefilter("ignore", UnknownTsidWarning)
 
     async def _do() -> dict:
-        async with _client(timeout=timeout, timezone=timezone, endpoint=endpoint) as client:
+        async with _client(timeout=timeout, endpoint=endpoint) as client:
             return await client.fetch_raw(tsids, start=start, end=end, lookback=lb)
 
     payload = _run(_do)
