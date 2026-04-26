@@ -337,6 +337,27 @@ def test_raw_bad_lookback_exits_2():
     assert "error" in result.stderr.lower()
 
 
+def test_raw_lookback_with_both_endpoints_exits_2():
+    """Explicit --lookback alongside both --start and --end is an argument error for `raw` too."""
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(
+            app,
+            [
+                "raw",
+                "T",
+                "--start",
+                "2026-04-01",
+                "--end",
+                "2026-04-08",
+                "--lookback",
+                "30d",
+            ],
+        )
+    assert result.exit_code == 2
+    assert "--lookback" in result.stderr
+    client_cls.assert_not_called()
+
+
 def test_raw_quiet_suppresses_warnings():
     with (
         patch(
@@ -604,6 +625,119 @@ def test_fetch_no_header_rejected_with_non_csv(fmt, tmp_path: Path):
     assert result.exit_code == 2
     assert "--no-header" in result.stderr
     client_cls.assert_not_called()
+
+
+def test_fetch_lookback_with_both_endpoints_exits_2():
+    """Explicit --lookback alongside both --start and --end is an argument error."""
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(
+            app,
+            [
+                "fetch",
+                "T",
+                "--start",
+                "2026-04-01",
+                "--end",
+                "2026-04-08",
+                "--lookback",
+                "30d",
+            ],
+        )
+    assert result.exit_code == 2
+    assert "--lookback" in result.stderr
+    client_cls.assert_not_called()
+
+
+def test_fetch_start_after_end_exits_2_before_request():
+    """--start later than --end is a CLI argument error; client must not be constructed."""
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(
+            app,
+            ["fetch", "T", "--start", "2026-04-25", "--end", "2026-04-01"],
+        )
+    assert result.exit_code == 2
+    assert "--start" in result.stderr
+    assert "--end" in result.stderr
+    client_cls.assert_not_called()
+
+
+def test_describe_start_after_end_exits_2_before_request():
+    """--start later than --end is now rejected for `describe` too (via the shared helper)."""
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(
+            app,
+            ["describe", "T", "--start", "2026-04-25", "--end", "2026-04-01"],
+        )
+    assert result.exit_code == 2
+    assert "--start" in result.stderr
+    assert "--end" in result.stderr
+    client_cls.assert_not_called()
+
+
+def test_raw_start_after_end_exits_2_before_request():
+    """--start later than --end is now rejected for `raw` too (via the shared helper)."""
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(
+            app,
+            ["raw", "T", "--start", "2026-04-25", "--end", "2026-04-01"],
+        )
+    assert result.exit_code == 2
+    assert "--start" in result.stderr
+    assert "--end" in result.stderr
+    client_cls.assert_not_called()
+
+
+def test_fetch_accepts_iso_with_z_suffix(sample_table):
+    """The --start/--end help text mentions ISO-8601 with offset; verify Z and +00:00 actually parse."""
+    captured = {}
+
+    async def fake_fetch(self, tsids, *, start=None, end=None, lookback=None):
+        captured["start"] = start
+        captured["end"] = end
+        return sample_table
+
+    with (
+        patch("nwd_dataquery.cli.AsyncDataQueryClient.fetch", new=fake_fetch),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "fetch",
+                "T",
+                "--start",
+                "2026-04-01T00:00:00Z",
+                "--end",
+                "2026-04-08T00:00:00+00:00",
+            ],
+        )
+    assert result.exit_code == 0, result.stderr
+    assert captured["start"] is not None
+    assert captured["end"] is not None
+    assert captured["start"].tzinfo is not None
+    assert captured["end"].tzinfo is not None
+
+
+def test_fetch_no_lookback_with_both_endpoints_is_fine(sample_table):
+    """Without explicit --lookback, both --start and --end is the canonical happy path."""
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["fetch", "T", "--start", "2026-04-01", "--end", "2026-04-08"],
+        )
+    assert result.exit_code == 0, result.stderr
 
 
 def test_write_csv_no_header_to_buffer(sample_table):

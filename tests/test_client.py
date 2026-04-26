@@ -269,6 +269,19 @@ async def test_describe_returns_metadata_without_values():
 # --- coverage gap tests ---
 
 
+async def test_fetch_raw_rejects_overspecified_window():
+    """fetch_raw raises ValueError when start, end, AND lookback are all explicitly given."""
+    client = _mock_client(lambda req: httpx.Response(200, json={}))
+    with pytest.raises(ValueError, match="lookback"):
+        await client.fetch_raw(
+            "T",
+            start=datetime(2026, 1, 1, tzinfo=UTC),
+            end=datetime(2026, 1, 8, tzinfo=UTC),
+            lookback=timedelta(days=3),
+        )
+    await client.aclose()
+
+
 async def test_fetch_raw_start_none_end_provided():
     """client.py:80 — start=None, end provided → start = end - lookback."""
     captured = {}
@@ -288,6 +301,30 @@ async def test_fetch_raw_start_none_end_provided():
     end_str = captured["params"]["enddate"]
     assert start_str == "2026-04-15T00:00:00Z"
     assert end_str == "2026-04-18T00:00:00Z"
+
+
+async def test_fetch_raw_start_provided_end_none_fills_end_with_now():
+    """client.py: start provided, end=None → end is filled with now() so a closed window is sent."""
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(200, json={})
+
+    client = _mock_client(handler)
+    start = datetime(2026, 4, 1, tzinfo=UTC)
+    before = datetime.now(UTC)
+    with pytest.warns(UnknownTsidWarning):
+        await client.fetch_raw("T", start=start)
+    after = datetime.now(UTC)
+    await client.aclose()
+
+    assert captured["params"]["startdate"] == "2026-04-01T00:00:00Z"
+    assert "enddate" in captured["params"]  # previously omitted
+    end_str = captured["params"]["enddate"]
+    end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+    # end was filled with now(); allow a small window for clock motion during the call
+    assert before - timedelta(seconds=2) <= end_dt <= after + timedelta(seconds=2)
 
 
 async def test_fetch_raw_non_json_body_raises_value_error():

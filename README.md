@@ -68,6 +68,7 @@ df  = await client.fetch(tsid, backend="pandas")  # requires nwd-dataquery[panda
 nwd-dq fetch LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW --lookback 30d
 nwd-dq fetch LWSC.Flow-In.Ave.~1Day.1Day.CENWS-COMPUTED-RAW \
     --start 2016-01-01 --format parquet --out flows.pq
+nwd-dq fetch LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW --start 2026-04-01  # start to now
 nwd-dq fetch LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW --format ndjson | jq -s .
 nwd-dq describe LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW | jq
 nwd-dq raw LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW --lookback 1d  # raw upstream JSON
@@ -77,6 +78,19 @@ nwd-dq --version
 ```
 
 `--format` accepts `csv`, `ndjson` (newline-delimited rows), `parquet`, and `json` (a back-compat alias for `ndjson`; the name is reserved for a future single-document JSON format). Invalid values exit 2 before any request is made.
+
+### Time window
+
+`--start` and `--end` are ISO-8601 (UTC if no offset). `--lookback` is a relative duration like `7d`, `48h`, `10y` (default: `7d`). Resolution rules:
+
+| `--start` | `--end` | window |
+| --- | --- | --- |
+| omitted | omitted | `[now - lookback, now]` |
+| omitted | given | `[end - lookback, end]` |
+| given | omitted | `[start, now]` |
+| given | given | `[start, end]` |
+
+Both rejections — combining explicit `--lookback` with both `--start` and `--end`, and `--start` later than `--end` — exit 2 before any request is made.
 
 ### Exit codes
 
