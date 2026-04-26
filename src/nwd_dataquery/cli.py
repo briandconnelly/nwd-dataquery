@@ -85,13 +85,16 @@ def fetch(
     start: Annotated[
         datetime | None,
         typer.Option(
-            help="ISO-8601 start (UTC if no offset).",
+            help="Window start (inclusive). ISO-8601; UTC if no offset. Defaults to (end - lookback).",
             formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
         ),
     ] = None,
     end: Annotated[
         datetime | None,
-        typer.Option(help="ISO-8601 end.", formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"]),
+        typer.Option(
+            help="Window end (inclusive). ISO-8601; UTC if no offset. Defaults to now.",
+            formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
+        ),
     ] = None,
     lookback: Annotated[
         str | None,
@@ -232,8 +235,18 @@ def _latest_per_tsid(table: pa.Table) -> pa.Table:
 @app.command()
 def describe(
     tsids: Annotated[list[str], typer.Argument(help="One or more CWMS tsids.")],
-    start: Annotated[datetime | None, typer.Option()] = None,
-    end: Annotated[datetime | None, typer.Option()] = None,
+    start: Annotated[
+        datetime | None,
+        typer.Option(
+            help="Window start (inclusive). ISO-8601; UTC if no offset. Defaults to (end - lookback).",
+        ),
+    ] = None,
+    end: Annotated[
+        datetime | None,
+        typer.Option(
+            help="Window end (inclusive). ISO-8601; UTC if no offset. Defaults to now.",
+        ),
+    ] = None,
     lookback: Annotated[
         str | None,
         typer.Option(
