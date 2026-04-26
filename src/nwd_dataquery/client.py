@@ -99,6 +99,13 @@ class AsyncDataQueryClient:
 
         if start is not None and end is not None and lookback is not None:
             raise ValueError("lookback cannot be combined with both start and end")
+        if start is not None and end is not None:
+            start_utc = start.replace(tzinfo=UTC) if start.tzinfo is None else start
+            end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end
+            if start_utc > end_utc:
+                raise ValueError(
+                    f"start ({start_utc.isoformat()}) is after end ({end_utc.isoformat()})"
+                )
         if lookback is None:
             lookback = DEFAULT_LOOKBACK
 

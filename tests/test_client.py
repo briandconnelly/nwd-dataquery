@@ -282,6 +282,75 @@ async def test_fetch_raw_rejects_overspecified_window():
     await client.aclose()
 
 
+async def test_fetch_raw_rejects_start_after_end():
+    """fetch_raw raises ValueError when start > end (both aware UTC)."""
+    client = _mock_client(lambda req: httpx.Response(200, json={}))
+    with pytest.raises(ValueError, match=r"start.*is after end"):
+        await client.fetch_raw(
+            "T",
+            start=datetime(2026, 1, 8, tzinfo=UTC),
+            end=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    await client.aclose()
+
+
+async def test_fetch_raw_rejects_naive_start_after_aware_end():
+    """Naive start (treated as UTC) after aware end raises ValueError."""
+    client = _mock_client(lambda req: httpx.Response(200, json={}))
+    with pytest.raises(ValueError, match=r"start.*is after end"):
+        await client.fetch_raw(
+            "T",
+            start=datetime(2026, 1, 8),  # naive
+            end=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    await client.aclose()
+
+
+async def test_fetch_raw_rejects_aware_start_after_naive_end():
+    """Aware start after naive end (treated as UTC) raises ValueError."""
+    client = _mock_client(lambda req: httpx.Response(200, json={}))
+    with pytest.raises(ValueError, match=r"start.*is after end"):
+        await client.fetch_raw(
+            "T",
+            start=datetime(2026, 1, 8, tzinfo=UTC),
+            end=datetime(2026, 1, 1),  # naive
+        )
+    await client.aclose()
+
+
+async def test_fetch_raw_accepts_start_equal_to_end():
+    """A zero-length window (start == end) is valid; the request still goes out."""
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(200, json={})
+
+    client = _mock_client(handler)
+    t = datetime(2026, 1, 1, tzinfo=UTC)
+    with pytest.warns(UnknownTsidWarning):
+        await client.fetch_raw("T", start=t, end=t)
+    await client.aclose()
+
+    assert captured["params"]["startdate"] == "2026-01-01T00:00:00Z"
+    assert captured["params"]["enddate"] == "2026-01-01T00:00:00Z"
+
+
+async def test_fetch_raw_start_after_end_error_message_includes_isoformat():
+    """The ValueError message includes both isoformat values for diagnosis."""
+    client = _mock_client(lambda req: httpx.Response(200, json={}))
+    with pytest.raises(ValueError) as exc_info:
+        await client.fetch_raw(
+            "T",
+            start=datetime(2026, 6, 15, 12, 0, 0, tzinfo=UTC),
+            end=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
+        )
+    msg = str(exc_info.value)
+    assert "2026-06-15T12:00:00+00:00" in msg
+    assert "2026-01-01T00:00:00+00:00" in msg
+    await client.aclose()
+
+
 async def test_fetch_raw_start_none_end_provided():
     """client.py:80 — start=None, end provided → start = end - lookback."""
     captured = {}
