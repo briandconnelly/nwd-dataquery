@@ -158,19 +158,7 @@ def fetch(
         )
         raise typer.Exit(code=2)
 
-    if start is not None and end is not None and lookback is not None:
-        typer.secho(
-            "error: --lookback cannot be combined with both --start and --end",
-            fg="red",
-            err=True,
-        )
-        raise typer.Exit(code=2)
-
-    try:
-        lb = parse_duration(lookback) if lookback is not None else None
-    except ValueError as exc:
-        typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=2) from exc
+    lb = _resolve_window_args(start, end, lookback)
 
     if quiet:
         import warnings
@@ -252,19 +240,7 @@ def describe(
     endpoint: Annotated[str | None, typer.Option()] = None,
 ) -> None:
     """Emit location + tsid metadata as JSON (no values)."""
-    if start is not None and end is not None and lookback is not None:
-        typer.secho(
-            "error: --lookback cannot be combined with both --start and --end",
-            fg="red",
-            err=True,
-        )
-        raise typer.Exit(code=2)
-
-    try:
-        lb = parse_duration(lookback) if lookback is not None else None
-    except ValueError as exc:
-        typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=2) from exc
+    lb = _resolve_window_args(start, end, lookback)
 
     async def _run() -> dict:
         async with AsyncDataQueryClient(
@@ -302,7 +278,15 @@ def raw(
         datetime | None,
         typer.Option(help="ISO-8601 end.", formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"]),
     ] = None,
-    lookback: Annotated[str, typer.Option(help="Relative lookback (e.g. 7d, 10y).")] = "7d",
+    lookback: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                "Window length when --start and/or --end is omitted (e.g. 7d, 48h, 10y). "
+                "Default: 7d. Rejected when both --start and --end are given."
+            ),
+        ),
+    ] = None,
     timezone: Annotated[str, typer.Option(help="Server timezone bucketing.")] = "GMT",
     out: Annotated[
         Path | None,
@@ -315,11 +299,7 @@ def raw(
     quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
 ) -> None:
     """Print the raw upstream JSON payload for one or more tsids."""
-    try:
-        lb = parse_duration(lookback)
-    except ValueError as exc:
-        typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=2) from exc
+    lb = _resolve_window_args(start, end, lookback)
 
     if quiet:
         import warnings
@@ -352,6 +332,33 @@ def raw(
         out.write_text(text + "\n")
     else:
         typer.echo(text)
+
+
+def _resolve_window_args(
+    start: datetime | None,
+    end: datetime | None,
+    lookback: str | None,
+) -> timedelta | None:
+    """Validate window args and parse `lookback` into a timedelta.
+
+    Rejects the overspecified case (`--start`, `--end`, and `--lookback` all given)
+    with `typer.Exit(code=2)`. Returns `None` when `lookback` is omitted so the
+    library layer can apply its own default.
+    """
+    if start is not None and end is not None and lookback is not None:
+        typer.secho(
+            "error: --lookback cannot be combined with both --start and --end",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    if lookback is None:
+        return None
+    try:
+        return parse_duration(lookback)
+    except ValueError as exc:
+        typer.secho(f"error: {exc}", fg="red", err=True)
+        raise typer.Exit(code=2) from exc
 
 
 def _write(

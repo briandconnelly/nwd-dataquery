@@ -337,6 +337,27 @@ def test_raw_bad_lookback_exits_2():
     assert "error" in result.stderr.lower()
 
 
+def test_raw_lookback_with_both_endpoints_exits_2():
+    """Explicit --lookback alongside both --start and --end is an argument error for `raw` too."""
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(
+            app,
+            [
+                "raw",
+                "T",
+                "--start",
+                "2026-04-01",
+                "--end",
+                "2026-04-08",
+                "--lookback",
+                "30d",
+            ],
+        )
+    assert result.exit_code == 2
+    assert "--lookback" in result.stderr
+    client_cls.assert_not_called()
+
+
 def test_raw_quiet_suppresses_warnings():
     with (
         patch(
