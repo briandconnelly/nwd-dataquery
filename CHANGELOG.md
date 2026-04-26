@@ -11,10 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `nwd-dq fetch --no-header` to omit the CSV header row (CSV-only; combining with `--format ndjson`/`json`/`parquet` exits 2).
 - `nwd-dq fetch --fail-empty` as the new canonical name for the empty-result exit-3 contract.
+- `nwd-dq fetch` rejects `--start > --end` with exit 2 before issuing any request.
+- `nwd-dq fetch`, `describe`, and `raw` reject explicit `--lookback` combined with both `--start` and `--end` with exit 2 (previously silently ignored). The same overspecified call on `AsyncDataQueryClient.fetch_raw`/`fetch`/`describe` now raises `ValueError`.
 
 ### Deprecated
 
 - `nwd-dq fetch --strict` is deprecated in favor of `--fail-empty`. It still works and still exits 3 on empty, but now prints a one-line deprecation warning to stderr. It will be removed in a future release.
+
+### Changed
+
+- `AsyncDataQueryClient.fetch_raw` (and therefore `fetch`/`describe`) now fills `end = datetime.now(UTC)` when only `start` is provided. Previously the request was sent with `startdate` only and no `enddate`, leaving the upstream end of the window up to the server.
+- The `lookback` keyword on `fetch_raw`, `fetch`, and `describe` defaults to `None` instead of `DEFAULT_LOOKBACK`. `None` is resolved to `DEFAULT_LOOKBACK` internally, so callers that omit the argument see no change; callers that passed `lookback=...` alongside both `start=` and `end=` now get a `ValueError`.
 
 ## [0.2.0] - 2026-04-25
 
