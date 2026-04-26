@@ -74,6 +74,36 @@ _DURATION_UNITS = {
     "m": lambda n: timedelta(minutes=n),
 }
 
+WindowStart = Annotated[
+    datetime | None,
+    typer.Option(
+        help="Window start (inclusive). ISO-8601; UTC if no offset. Defaults to (end - lookback).",
+        formats=_DATETIME_FORMATS,
+    ),
+]
+WindowEnd = Annotated[
+    datetime | None,
+    typer.Option(
+        help="Window end (inclusive). ISO-8601; UTC if no offset. Defaults to now.",
+        formats=_DATETIME_FORMATS,
+    ),
+]
+LookbackOpt = Annotated[
+    str | None,
+    typer.Option(
+        help=(
+            "Window length when --start and/or --end is omitted (e.g. 7d, 48h, 10y). "
+            "Default: 7d. Rejected when both --start and --end are given."
+        ),
+    ),
+]
+TimezoneOpt = Annotated[str, typer.Option(help="Server timezone bucketing.")]
+TimeoutOpt = Annotated[float, typer.Option(help="HTTP timeout (seconds).")]
+EndpointOpt = Annotated[
+    str | None,
+    typer.Option(help="Override the Dataquery 2.0 endpoint URL."),
+]
+
 
 def parse_duration(text: str) -> timedelta:
     """Parse simple durations like ``7d``, ``48h``, ``10y``."""
