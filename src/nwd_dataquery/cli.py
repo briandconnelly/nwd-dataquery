@@ -58,6 +58,12 @@ class OutputFormat(StrEnum):
     parquet = "parquet"
 
 
+_DATETIME_FORMATS = [
+    "%Y-%m-%d",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S%z",
+]
+
 _DURATION_RE = re.compile(r"^\s*(\d+)\s*([yMwdhm])\s*$")
 _DURATION_UNITS = {
     "y": lambda n: timedelta(days=365 * n),
@@ -86,14 +92,14 @@ def fetch(
         datetime | None,
         typer.Option(
             help="Window start (inclusive). ISO-8601; UTC if no offset. Defaults to (end - lookback).",
-            formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
+            formats=_DATETIME_FORMATS,
         ),
     ] = None,
     end: Annotated[
         datetime | None,
         typer.Option(
             help="Window end (inclusive). ISO-8601; UTC if no offset. Defaults to now.",
-            formats=["%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"],
+            formats=_DATETIME_FORMATS,
         ),
     ] = None,
     lookback: Annotated[
@@ -156,14 +162,6 @@ def fetch(
     if no_header and fmt != OutputFormat.csv:
         typer.secho(
             f"error: --no-header only applies to --format csv (got {fmt.value})",
-            fg="red",
-            err=True,
-        )
-        raise typer.Exit(code=2)
-
-    if start is not None and end is not None and start > end:
-        typer.secho(
-            f"error: --start ({start.isoformat()}) is after --end ({end.isoformat()})",
             fg="red",
             err=True,
         )
@@ -239,12 +237,14 @@ def describe(
         datetime | None,
         typer.Option(
             help="Window start (inclusive). ISO-8601; UTC if no offset. Defaults to (end - lookback).",
+            formats=_DATETIME_FORMATS,
         ),
     ] = None,
     end: Annotated[
         datetime | None,
         typer.Option(
             help="Window end (inclusive). ISO-8601; UTC if no offset. Defaults to now.",
+            formats=_DATETIME_FORMATS,
         ),
     ] = None,
     lookback: Annotated[
@@ -369,6 +369,13 @@ def _resolve_window_args(
     if start is not None and end is not None and lookback is not None:
         typer.secho(
             "error: --lookback cannot be combined with both --start and --end",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    if start is not None and end is not None and start > end:
+        typer.secho(
+            f"error: --start ({start.isoformat()}) is after --end ({end.isoformat()})",
             fg="red",
             err=True,
         )
