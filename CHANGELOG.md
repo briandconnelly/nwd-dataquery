@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AsyncDataQueryClient.fetch_raw` (and therefore `fetch`/`describe`) now fills `end = datetime.now(UTC)` when only `start` is provided. Previously the request was sent with `startdate` only and no `enddate`, leaving the upstream end of the window up to the server.
 - The `lookback` keyword on `fetch_raw`, `fetch`, and `describe` defaults to `None` instead of `DEFAULT_LOOKBACK`. `None` is resolved to `DEFAULT_LOOKBACK` internally, so callers that omit the argument see no change; callers that passed `lookback=...` alongside both `start=` and `end=` now get a `ValueError`.
 - `nwd-dq raw` now accepts the same `--start`/`--end` formats as `fetch` and `describe`, including ISO-8601 with `Z` or numeric offset. Internal refactor consolidated the per-subcommand option declarations and async-run/error-mapping blocks into shared `Annotated` aliases and `_client()`/`_run()` helpers — as a side effect, `nwd-dq describe --help` now also shows help text for `--timezone`, `--timeout`, and `--endpoint` (previously empty). No runtime behavior change.
+- `AsyncDataQueryClient.fetch_raw` (and therefore `fetch`/`describe`) now raises `ValueError` when `start > end`. Previously this was caught only by the CLI; library callers could issue an upside-down window and get a confusing upstream response. Naive datetimes are treated as UTC for the comparison, matching the existing `_iso` normalization.
 
 ## [0.2.0] - 2026-04-25
 
