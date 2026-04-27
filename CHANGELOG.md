@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nwd-dq fetch --fail-empty` as the new canonical name for the empty-result exit-3 contract.
 - `nwd-dq fetch` rejects `--start > --end` with exit 2 before issuing any request.
 - `nwd-dq fetch`, `describe`, and `raw` reject explicit `--lookback` combined with both `--start` and `--end` with exit 2 (previously silently ignored). The same overspecified call on `AsyncDataQueryClient.fetch_raw`/`fetch`/`describe` now raises `ValueError`.
+- `nwd-dq --install-completion` and `nwd-dq --show-completion` for bash/zsh/fish (closes #33).
 
 ### Deprecated
 
