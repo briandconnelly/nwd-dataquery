@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pyarrow as pa
 import pytest
 from typer.testing import CliRunner
@@ -835,3 +836,265 @@ def test_fetch_latest_flag_reduces_output():
     assert len(lines) == 2
     by_tsid = {r["tsid"]: r["value"] for r in lines}
     assert by_tsid == {"A": 2.0, "B": 20.0}
+
+
+def test_describe_for_http_status_error_5xx_with_body():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    resp = httpx.Response(503, json={"error": "Service unavailable"}, request=req)
+    err = httpx.HTTPStatusError("503", request=req, response=resp)
+    assert _describe(err) == "server returned 503 from example.com: Service unavailable"
+
+
+def test_describe_for_http_status_error_4xx_no_body():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    resp = httpx.Response(404, content=b"not found", request=req)
+    err = httpx.HTTPStatusError("404", request=req, response=resp)
+    assert _describe(err) == "server returned 404 from example.com"
+
+
+def test_describe_for_connect_timeout():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    assert (
+        _describe(httpx.ConnectTimeout("timed out", request=req))
+        == "connect timeout to example.com"
+    )
+
+
+def test_describe_for_read_timeout():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    assert (
+        _describe(httpx.ReadTimeout("read timeout", request=req)) == "read timeout from example.com"
+    )
+
+
+def test_describe_for_connect_error():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    msg = _describe(httpx.ConnectError("conn refused", request=req))
+    assert msg.startswith("connect failed to example.com: ")
+
+
+def test_describe_for_other_transport_error():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    msg = _describe(httpx.NetworkError("net broke", request=req))
+    assert msg == "transport error: net broke"
+
+
+# --- Retry behavior helpers ---
+
+
+def _failing_then_succeeds(failures, exception_factory):
+    """Returns (handler, counter). Handler raises `exception_factory(request)`
+    `failures` times, then returns 200 with empty payload.
+    """
+    counter = {"calls": 0}
+
+    def handler(request):
+        counter["calls"] += 1
+        if counter["calls"] <= failures:
+            raise exception_factory(request)
+        return httpx.Response(200, json={})
+
+    return handler, counter
+
+
+def _always_fails(exception_factory):
+    """Returns (handler, counter). Handler always raises `exception_factory(request)`."""
+    counter = {"calls": 0}
+
+    def handler(request):
+        counter["calls"] += 1
+        raise exception_factory(request)
+
+    return handler, counter
+
+
+def _patch_cli_client(monkeypatch, handler):
+    """Monkeypatch nwd_dataquery.cli._client to return a mock-backed AsyncDataQueryClient.
+
+    Returns nothing — the patching has the side effect.
+    """
+    from nwd_dataquery import client as client_module
+
+    transport = httpx.MockTransport(handler)
+    session = httpx.AsyncClient(transport=transport)
+    monkeypatch.setattr(
+        "nwd_dataquery.cli._client",
+        lambda *, timeout, endpoint: client_module.AsyncDataQueryClient(session=session),
+    )
+
+
+def test_fetch_retries_then_succeeds_on_transport_error(monkeypatch):
+    """ConnectError twice, then 200. Sleeps 1.0s, 2.0s. Exit 0."""
+    handler, counter = _failing_then_succeeds(
+        failures=2,
+        exception_factory=lambda req: httpx.ConnectError("conn refused", request=req),
+    )
+    sleeps: list[float] = []
+    monkeypatch.setattr("nwd_dataquery.cli.time.sleep", sleeps.append)
+    _patch_cli_client(monkeypatch, handler)
+
+    result = runner.invoke(app, ["fetch", "T", "--retries", "2", "--retry-backoff", "1.0"])
+    assert result.exit_code == 0, result.stderr
+    assert counter["calls"] == 3
+    assert sleeps == [1.0, 2.0]
+
+
+def test_fetch_retries_exhausted_exits_1_with_count(monkeypatch):
+    """ReadTimeout 3 times with --retries 2. Three attempts, exit 1, message names retry count."""
+    handler, counter = _always_fails(
+        exception_factory=lambda req: httpx.ReadTimeout("slow", request=req),
+    )
+    monkeypatch.setattr("nwd_dataquery.cli.time.sleep", lambda s: None)
+    _patch_cli_client(monkeypatch, handler)
+
+    result = runner.invoke(app, ["fetch", "T", "--retries", "2", "--retry-backoff", "0.01"])
+    assert result.exit_code == 1
+    assert counter["calls"] == 3  # initial + 2 retries
+    assert "(after 2 retries)" in result.stderr
+    assert "read timeout" in result.stderr
+
+
+def test_fetch_no_retry_on_4xx(monkeypatch):
+    """404 → single attempt, exit 1, message names status code."""
+    counter = {"calls": 0}
+
+    def handler(request):
+        counter["calls"] += 1
+        return httpx.Response(404, content=b"not found")
+
+    _patch_cli_client(monkeypatch, handler)
+
+    result = runner.invoke(app, ["fetch", "T", "--retries", "5"])
+    assert result.exit_code == 1
+    assert counter["calls"] == 1
+    assert "404" in result.stderr
+    assert "(after" not in result.stderr  # no retries-suffix
+
+
+def test_fetch_retries_on_5xx(monkeypatch):
+    """503 once, then 200. Two attempts, exit 0."""
+    counter = {"calls": 0}
+
+    def handler(request):
+        counter["calls"] += 1
+        if counter["calls"] == 1:
+            return httpx.Response(503, content=b"unavailable")
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr("nwd_dataquery.cli.time.sleep", lambda s: None)
+    _patch_cli_client(monkeypatch, handler)
+
+    result = runner.invoke(app, ["fetch", "T", "--retries", "2"])
+    assert result.exit_code == 0, result.stderr
+    assert counter["calls"] == 2
+
+
+def test_fetch_no_retry_on_data_query_error(monkeypatch):
+    """200 with {'error': '...'} → single attempt, exit 2."""
+    counter = {"calls": 0}
+
+    def handler(request):
+        counter["calls"] += 1
+        return httpx.Response(200, json={"error": "bad tsid"})
+
+    _patch_cli_client(monkeypatch, handler)
+
+    result = runner.invoke(app, ["fetch", "T", "--retries", "5"])
+    assert result.exit_code == 2
+    assert counter["calls"] == 1
+    assert "bad tsid" in result.stderr
+
+
+def test_fetch_retries_zero_snap_fails(monkeypatch):
+    """ConnectError with --retries 0 → single attempt, exit 1, no warnings, no sleeps."""
+    handler, counter = _always_fails(
+        exception_factory=lambda req: httpx.ConnectError("conn refused", request=req),
+    )
+    sleeps: list[float] = []
+    monkeypatch.setattr("nwd_dataquery.cli.time.sleep", sleeps.append)
+    _patch_cli_client(monkeypatch, handler)
+
+    result = runner.invoke(app, ["fetch", "T", "--retries", "0"])
+    assert result.exit_code == 1
+    assert counter["calls"] == 1
+    assert sleeps == []
+    assert "warning:" not in result.stderr
+    assert "(after" not in result.stderr  # no retries-suffix when retries=0
+
+
+def test_fetch_quiet_suppresses_retry_warnings(monkeypatch):
+    """Same retry-then-succeed scenario plus --quiet. Exit 0, no warning: lines on stderr."""
+    handler, counter = _failing_then_succeeds(
+        failures=2,
+        exception_factory=lambda req: httpx.ConnectError("conn refused", request=req),
+    )
+    monkeypatch.setattr("nwd_dataquery.cli.time.sleep", lambda s: None)
+    _patch_cli_client(monkeypatch, handler)
+
+    result = runner.invoke(
+        app, ["fetch", "T", "--retries", "2", "--retry-backoff", "0.01", "--quiet"]
+    )
+    assert result.exit_code == 0, result.stderr
+    assert counter["calls"] == 3
+    assert "warning:" not in result.stderr
+
+
+def test_fetch_rejects_negative_retries():
+    """--retries -1 exits 2 from Typer's min= validator before any HTTP call."""
+    result = runner.invoke(app, ["fetch", "T", "--retries", "-1"])
+    assert result.exit_code == 2
+
+
+def test_fetch_rejects_negative_retry_backoff():
+    """--retry-backoff -1 exits 2 from Typer's min= validator before any HTTP call."""
+    result = runner.invoke(app, ["fetch", "T", "--retry-backoff", "-1"])
+    assert result.exit_code == 2
+
+
+def test_fetch_rejects_nan_retry_backoff():
+    """--retry-backoff nan exits 2 via the _require_finite callback. Typer's
+    min=0.0 alone does NOT reject nan; the explicit callback prevents
+    time.sleep(nan) from raising ValueError inside the retry handler.
+    """
+    result = runner.invoke(app, ["fetch", "T", "--retry-backoff", "nan"])
+    assert result.exit_code == 2
+
+
+def test_fetch_rejects_inf_retry_backoff():
+    """--retry-backoff inf exits 2 via the _require_finite callback. inf would
+    pass min=0.0 (inf >= 0 is True) but cause time.sleep(inf) to hang forever.
+    """
+    result = runner.invoke(app, ["fetch", "T", "--retry-backoff", "inf"])
+    assert result.exit_code == 2
+
+
+def test_describe_quiet_suppresses_warnings(monkeypatch):
+    """--quiet on describe registers the UnknownTsidWarning suppression filter
+    (covers the new `if quiet:` block added when describe gained --quiet).
+    """
+    meta = {"LWSC": {"name": "X", "timeseries": {"T": {}}}}
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.describe",
+            new=AsyncMock(return_value=meta),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["describe", "T", "--quiet"])
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == meta

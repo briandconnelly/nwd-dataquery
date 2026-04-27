@@ -139,10 +139,12 @@ class AsyncDataQueryClient:
             response.raise_for_status()
             raise
 
-        # Server-reported errors carry an actionable message; surface those
-        # before raising for HTTP status so the message isn't lost behind a
-        # generic 5xx.
-        if isinstance(payload, dict) and "error" in payload:
+        # Surface server-reported errors as DataQueryError, but only for
+        # non-5xx responses. A 5xx with an error body is a transient server
+        # failure dressed up with a message — let it raise HTTPStatusError so
+        # callers can retry. The original message remains on
+        # exc.response.json() for diagnostic display.
+        if isinstance(payload, dict) and "error" in payload and response.status_code < 500:
             raise DataQueryError(payload["error"])
 
         response.raise_for_status()

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nwd-dq fetch` rejects `--start > --end` with exit 2 before issuing any request.
 - `nwd-dq fetch`, `describe`, and `raw` reject explicit `--lookback` combined with both `--start` and `--end` with exit 2 (previously silently ignored). The same overspecified call on `AsyncDataQueryClient.fetch_raw`/`fetch`/`describe` now raises `ValueError`.
 - `nwd-dq --install-completion` and `nwd-dq --show-completion` for bash/zsh/fish (closes #33).
+- `nwd-dq fetch`/`describe`/`raw` accept `--retries N` (default 2) and `--retry-backoff SECONDS` (default 1.0). Transport errors (connect/read timeouts, network errors) and HTTP 5xx are retried with exponential backoff; 4xx, `DataQueryError`, and other exceptions are never retried. Stderr now distinguishes connect timeout, read timeout, and 5xx in the error message. Retry warnings respect `--quiet`. `nwd-dq describe` now also accepts `-q`/`--quiet` (matching `fetch` and `raw`) so retry warnings can be suppressed there too. Closes #31.
 
 ### Deprecated
 
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `lookback` keyword on `fetch_raw`, `fetch`, and `describe` defaults to `None` instead of `DEFAULT_LOOKBACK`. `None` is resolved to `DEFAULT_LOOKBACK` internally, so callers that omit the argument see no change; callers that passed `lookback=...` alongside both `start=` and `end=` now get a `ValueError`.
 - `nwd-dq raw` now accepts the same `--start`/`--end` formats as `fetch` and `describe`, including ISO-8601 with `Z` or numeric offset. Internal refactor consolidated the per-subcommand option declarations and async-run/error-mapping blocks into shared `Annotated` aliases and `_client()`/`_run()` helpers — as a side effect, `nwd-dq describe --help` now also shows help text for `--timeout` and `--endpoint` (previously empty). No runtime behavior change.
 - `AsyncDataQueryClient.fetch_raw` (and therefore `fetch`/`describe`) now raises `ValueError` when both `start` and `end` are explicitly provided and `start > end`. Previously this was caught only by the CLI; library callers could issue an upside-down window and get a confusing upstream response. Naive datetimes are treated as UTC for the comparison, matching the existing `_iso` normalization, and the error message reports both bounds in normalized UTC isoformat.
+- `AsyncDataQueryClient.fetch_raw` (and `fetch`/`describe`) now raises `httpx.HTTPStatusError` for 5xx responses even when the body contains `{"error": ...}`. Previously the error key short-circuited to `DataQueryError` regardless of status, which made transient server failures look like permanent application errors and bypassed any retry logic in callers. The original error message remains accessible via `exc.response.json()`. 4xx-with-error-body and 2xx-with-error-body still raise `DataQueryError` as before.
 
 ### Removed
 

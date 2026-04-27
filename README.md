@@ -105,6 +105,16 @@ Both rejections — combining explicit `--lookback` with both `--start` and `--e
 
 Scripting flags: `--no-header` (CSV only) suppresses the header row; `--fail-empty` turns an empty result into a non-zero exit so pipelines can branch on it.
 
+### Resilience
+
+Transient failures (connect/read timeouts, network errors, HTTP 5xx) are retried by default with exponential backoff. Tune via:
+
+```bash
+nwd-dq fetch TSID --retries 5 --retry-backoff 2.0
+```
+
+Pass `--retries 0` to disable retries (snap-fail). `DataQueryError` (a `{"error": ...}` response from the upstream) and HTTP 4xx are never retried. Retry warnings on stderr respect `--quiet`.
+
 ## Output schema
 
 `fetch()` returns a long-format frame with columns:
