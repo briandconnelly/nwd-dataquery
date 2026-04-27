@@ -52,7 +52,7 @@ class LocationEntry(TypedDict, total=False):
 # Public type alias for the upstream JSON shape. `describe()` returns the same
 # shape with per-timeseries `values` stripped — the `total=False` on
 # TimeseriesEntry permits this.
-DataqueryPayload = dict[str, LocationEntry]
+DataQueryPayload = dict[str, LocationEntry]
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ class AsyncDataQueryClient:
         start: datetime | None = None,
         end: datetime | None = None,
         lookback: timedelta | None = None,
-    ) -> DataqueryPayload:
+    ) -> DataQueryPayload:
         """Return the raw JSON payload for the given tsid(s)."""
         if isinstance(tsids, str):
             tsids = [tsids]
@@ -266,7 +266,7 @@ class AsyncDataQueryClient:
         start: datetime | None = None,
         end: datetime | None = None,
         lookback: timedelta | None = None,
-    ) -> DataqueryPayload:
+    ) -> DataQueryPayload:
         """Return location + tsid metadata without the time series values.
 
         Returns the same shape as `fetch_raw`, but each per-timeseries body
@@ -278,7 +278,7 @@ class AsyncDataQueryClient:
         # LocationEntry's TypedDict shape, but the structural construction is
         # verified by tests/test_client.py::test_describe_returns_metadata_without_values.
         return cast(
-            DataqueryPayload,
+            DataQueryPayload,
             {
                 loc: {k: v for k, v in body.items() if k != "timeseries"}
                 | {

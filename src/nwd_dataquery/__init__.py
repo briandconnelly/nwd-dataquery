@@ -7,7 +7,7 @@ from importlib.metadata import version as _pkg_version
 
 from .client import (
     AsyncDataQueryClient,
-    DataqueryPayload,
+    DataQueryPayload,
     LocationEntry,
     TimeseriesEntry,
 )
@@ -21,7 +21,7 @@ except PackageNotFoundError:
 __all__ = [
     "AsyncDataQueryClient",
     "DataQueryError",
-    "DataqueryPayload",
+    "DataQueryPayload",
     "LocationEntry",
     "TimeseriesEntry",
     "UnknownTsidWarning",

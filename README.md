@@ -129,7 +129,7 @@ Pass `--retries 0` to disable retries (snap-fail). `DataQueryError` (a `{"error"
 | `parameter` | `string` | parameter name (`Elev-Lake`, `Flow-In`, …) |
 | `units` | `string` | server-reported units (`FT`, `CFS`, …) |
 
-The return type tracks the requested backend: `fetch()` returns `pyarrow.Table` by default, `polars.DataFrame` with `backend="polars"`, and `pandas.DataFrame` with `backend="pandas"`. `fetch_raw()` and `describe()` return a `DataqueryPayload = dict[str, LocationEntry]` typed shape — import `DataqueryPayload`, `LocationEntry`, `TimeseriesEntry` from `nwd_dataquery` for your own annotations.
+The return type tracks the requested backend: `fetch()` returns `pyarrow.Table` by default, `polars.DataFrame` with `backend="polars"`, and `pandas.DataFrame` with `backend="pandas"`. `fetch_raw()` and `describe()` return a `DataQueryPayload = dict[str, LocationEntry]` typed shape — import `DataQueryPayload`, `LocationEntry`, `TimeseriesEntry` from `nwd_dataquery` for your own annotations.
 
 ## TSID anatomy
 
