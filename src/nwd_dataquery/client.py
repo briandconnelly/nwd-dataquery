@@ -134,6 +134,8 @@ class AsyncDataQueryClient:
 
         if start is not None and end is not None and lookback is not None:
             raise ValueError("lookback cannot be combined with both start and end")
+        if lookback is not None and lookback < timedelta(0):
+            raise ValueError(f"lookback must be non-negative, got {lookback!r}")
         if start is not None and end is not None:
             start_utc = start.replace(tzinfo=UTC) if start.tzinfo is None else start
             end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end
@@ -151,6 +153,18 @@ class AsyncDataQueryClient:
             start = end - lookback
         elif start is not None and end is None:
             end = datetime.now(UTC)
+
+        # Post-resolution sanity check: catches cases the explicit-bounds check
+        # above can't, e.g. a future `start` defaulted to `end = now()`.
+        # Negative `lookback` is rejected upstream so it doesn't reach here.
+        assert start is not None and end is not None
+        resolved_start = start.replace(tzinfo=UTC) if start.tzinfo is None else start
+        resolved_end = end.replace(tzinfo=UTC) if end.tzinfo is None else end
+        if resolved_start > resolved_end:
+            raise ValueError(
+                f"resolved window is inverted: start ({resolved_start.isoformat()}) "
+                f"is after end ({resolved_end.isoformat()})"
+            )
 
         # "GMT" is the only request value that produces timestamps consistent
         # with the parser's UTC assumption. The upstream silently falls back to
