@@ -9,13 +9,50 @@ import warnings
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from functools import cache
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast, overload
 from urllib.parse import urlsplit
 
 import httpx
 from aia_chaser import AiaChaser
 
 from .errors import DataQueryError, UnknownTsidWarning
+
+if TYPE_CHECKING:
+    import pandas as pd
+    import polars as pl
+    import pyarrow as pa
+
+
+class TimeseriesEntry(TypedDict, total=False):
+    """Per-tsid body in the upstream payload.
+
+    All fields optional (the upstream may omit any of them depending on the
+    response). `values` is a list of `[timestamp_iso, value, quality]` triples.
+    """
+
+    parameter: str
+    units: str
+    values: list[list[Any]]
+    count: int
+    start_timestamp: str
+    end_timestamp: str
+
+
+class LocationEntry(TypedDict, total=False):
+    """Per-location body in the upstream payload.
+
+    The upstream returns additional fields (coordinates, elevation, etc.) that
+    are not part of the typed contract; access them via `.get(...)` or `cast()`.
+    """
+
+    name: str
+    timeseries: dict[str, TimeseriesEntry]
+
+
+# Public type alias for the upstream JSON shape. `describe()` returns the same
+# shape with per-timeseries `values` stripped — the `total=False` on
+# TimeseriesEntry permits this.
+DataQueryPayload = dict[str, LocationEntry]
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +124,7 @@ class AsyncDataQueryClient:
         start: datetime | None = None,
         end: datetime | None = None,
         lookback: timedelta | None = None,
-    ) -> dict[str, Any]:
+    ) -> DataQueryPayload:
         """Return the raw JSON payload for the given tsid(s)."""
         if isinstance(tsids, str):
             tsids = [tsids]
@@ -162,6 +199,36 @@ class AsyncDataQueryClient:
             )
         return payload
 
+    @overload
+    async def fetch(
+        self,
+        tsids: str | Sequence[str],
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        lookback: timedelta | None = None,
+        backend: Literal["pyarrow"] = "pyarrow",
+    ) -> pa.Table: ...
+    @overload
+    async def fetch(
+        self,
+        tsids: str | Sequence[str],
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        lookback: timedelta | None = None,
+        backend: Literal["polars"],
+    ) -> pl.DataFrame: ...
+    @overload
+    async def fetch(
+        self,
+        tsids: str | Sequence[str],
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        lookback: timedelta | None = None,
+        backend: Literal["pandas"],
+    ) -> pd.DataFrame: ...
     async def fetch(
         self,
         tsids: str | Sequence[str],
@@ -199,21 +266,32 @@ class AsyncDataQueryClient:
         start: datetime | None = None,
         end: datetime | None = None,
         lookback: timedelta | None = None,
-    ) -> dict[str, Any]:
-        """Return location + tsid metadata without the time series values."""
+    ) -> DataQueryPayload:
+        """Return location + tsid metadata without the time series values.
+
+        Returns the same shape as `fetch_raw`, but each per-timeseries body
+        has its `values` key stripped. Permitted by `TimeseriesEntry`'s
+        `total=False`.
+        """
         payload = await self.fetch_raw(tsids, start=start, end=end, lookback=lookback)
-        return {
-            loc: {k: v for k, v in body.items() if k != "timeseries"}
-            | {
-                "timeseries": {
-                    t: {k: v for k, v in tb.items() if k != "values"}
-                    for t, tb in (body.get("timeseries") or {}).items()
-                    if isinstance(tb, dict)
+        # cast: ty can't statically prove the dict comprehension matches
+        # LocationEntry's TypedDict shape, but the structural construction is
+        # verified by tests/test_client.py::test_describe_returns_metadata_without_values.
+        return cast(
+            DataQueryPayload,
+            {
+                loc: {k: v for k, v in body.items() if k != "timeseries"}
+                | {
+                    "timeseries": {
+                        t: {k: v for k, v in tb.items() if k != "values"}
+                        for t, tb in (body.get("timeseries") or {}).items()
+                        if isinstance(tb, dict)
+                    }
                 }
-            }
-            for loc, body in payload.items()
-            if isinstance(body, dict)
-        }
+                for loc, body in payload.items()
+                if isinstance(body, dict)
+            },
+        )
 
 
 def _iso(dt: datetime) -> str:

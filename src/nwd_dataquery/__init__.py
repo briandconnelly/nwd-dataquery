@@ -5,7 +5,12 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
-from .client import AsyncDataQueryClient
+from .client import (
+    AsyncDataQueryClient,
+    DataQueryPayload,
+    LocationEntry,
+    TimeseriesEntry,
+)
 from .errors import DataQueryError, UnknownTsidWarning
 
 try:
@@ -16,6 +21,9 @@ except PackageNotFoundError:
 __all__ = [
     "AsyncDataQueryClient",
     "DataQueryError",
+    "DataQueryPayload",
+    "LocationEntry",
+    "TimeseriesEntry",
     "UnknownTsidWarning",
     "__version__",
 ]
