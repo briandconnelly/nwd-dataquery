@@ -1064,6 +1064,37 @@ def test_fetch_rejects_negative_retry_backoff():
 
 
 def test_fetch_rejects_nan_retry_backoff():
-    """--retry-backoff nan is rejected (non-zero exit): nan fails range/parse validation."""
+    """--retry-backoff nan exits 2 via the _require_finite callback. Typer's
+    min=0.0 alone does NOT reject nan; the explicit callback prevents
+    time.sleep(nan) from raising ValueError inside the retry handler.
+    """
     result = runner.invoke(app, ["fetch", "T", "--retry-backoff", "nan"])
-    assert result.exit_code != 0
+    assert result.exit_code == 2
+
+
+def test_fetch_rejects_inf_retry_backoff():
+    """--retry-backoff inf exits 2 via the _require_finite callback. inf would
+    pass min=0.0 (inf >= 0 is True) but cause time.sleep(inf) to hang forever.
+    """
+    result = runner.invoke(app, ["fetch", "T", "--retry-backoff", "inf"])
+    assert result.exit_code == 2
+
+
+def test_describe_quiet_suppresses_warnings(monkeypatch):
+    """--quiet on describe registers the UnknownTsidWarning suppression filter
+    (covers the new `if quiet:` block added when describe gained --quiet).
+    """
+    meta = {"LWSC": {"name": "X", "timeseries": {"T": {}}}}
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.describe",
+            new=AsyncMock(return_value=meta),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["describe", "T", "--quiet"])
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == meta

@@ -115,11 +115,28 @@ RetriesOpt = Annotated[
         help="Retry attempts on transport/5xx errors.",
     ),
 ]
+
+
+def _require_finite(value: float) -> float:
+    """Reject NaN and infinity. Typer's `min=` validator passes both
+    (`nan >= 0.0` is False but Click's FloatRange short-circuits the
+    isfinite check, and `inf >= 0.0` is True). Without this guard,
+    `time.sleep(nan)` would raise ValueError from inside the retry
+    handler, escaping the retry loop ungracefully.
+    """
+    import math
+
+    if not math.isfinite(value):
+        raise typer.BadParameter("must be a finite number")
+    return value
+
+
 RetryBackoffOpt = Annotated[
     float,
     typer.Option(
         "--retry-backoff",
         min=0.0,
+        callback=_require_finite,
         help="Base seconds for exponential backoff (1s, 2s, 4s, ...).",
     ),
 ]
