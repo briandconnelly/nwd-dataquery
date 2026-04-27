@@ -57,8 +57,8 @@ class OutputFormat(StrEnum):
     """Supported `--format` values for `nwd-dq fetch`."""
 
     csv = "csv"
-    ndjson = "ndjson"
-    json = "json"  # alias for ndjson; reserved for a future single-document JSON format
+    ndjson = "ndjson"  # one JSON object per line
+    json = "json"  # single JSON document: array of row objects
     parquet = "parquet"
 
 
@@ -228,7 +228,7 @@ def fetch(
         typer.Option(
             "--format",
             "-f",
-            help="Output format. `json` is an alias for `ndjson` (newline-delimited).",
+            help="Output format. `json` emits a single JSON array; `ndjson` emits one row per line.",
         ),
     ] = OutputFormat.csv,
     out: Annotated[
@@ -450,8 +450,7 @@ def _write(
             buf = io.BytesIO()
             pa_csv.write_csv(table, buf, write_options)
             sys.stdout.buffer.write(buf.getvalue())
-    elif fmt in (OutputFormat.ndjson, OutputFormat.json):
-        # NDJSON: one object per row. `json` is currently an alias.
+    elif fmt == OutputFormat.ndjson:
         sink = out.open("w") if out is not None else sys.stdout
         try:
             for batch in table.to_batches():
@@ -465,6 +464,20 @@ def _write(
         finally:
             if out is not None:
                 sink.close()
+    elif fmt == OutputFormat.json:
+        # Single JSON document: array of row objects. Buffers all rows so the
+        # closing `]` can be emitted; --format ndjson is the streaming form.
+        all_rows = []
+        for batch in table.to_batches():
+            for row in batch.to_pylist():
+                all_rows.append(
+                    {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in row.items()}
+                )
+        text = json.dumps(all_rows)
+        if out is not None:
+            out.write_text(text)
+        else:
+            sys.stdout.write(text)
     elif fmt == OutputFormat.parquet:
         import pyarrow.parquet as pa_pq
 

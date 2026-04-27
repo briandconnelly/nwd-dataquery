@@ -71,8 +71,8 @@ def test_fetch_csv_to_stdout(sample_table):
     assert "21.66" in result.stdout
 
 
-@pytest.mark.parametrize("fmt", ["json", "ndjson"])
-def test_fetch_ndjson_aliases_to_stdout(sample_table, fmt):
+def test_fetch_ndjson_to_stdout(sample_table):
+    """--format ndjson emits one JSON object per line."""
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
@@ -83,13 +83,34 @@ def test_fetch_ndjson_aliases_to_stdout(sample_table, fmt):
             new=AsyncMock(return_value=None),
         ),
     ):
-        result = runner.invoke(app, ["fetch", "T", "--format", fmt])
+        result = runner.invoke(app, ["fetch", "T", "--format", "ndjson"])
     assert result.exit_code == 0
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["value"] == 21.66
     assert record["tsid"] == "T"
+
+
+def test_fetch_json_to_stdout(sample_table):
+    """--format json emits a single JSON document (array of row objects)."""
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--format", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert isinstance(payload, list)
+    assert len(payload) == 1
+    assert payload[0]["value"] == 21.66
+    assert payload[0]["tsid"] == "T"
 
 
 def test_fetch_invalid_format_exits_before_request():
@@ -153,7 +174,8 @@ def test_fetch_csv_to_file(sample_table, tmp_path: Path):
 
 
 def test_fetch_json_to_file(sample_table, tmp_path: Path):
-    out = tmp_path / "out.ndjson"
+    """--format json --out PATH writes a single JSON array document."""
+    out = tmp_path / "out.json"
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
@@ -167,11 +189,93 @@ def test_fetch_json_to_file(sample_table, tmp_path: Path):
         result = runner.invoke(app, ["fetch", "T", "--format", "json", "--out", str(out)])
     assert result.exit_code == 0, result.stderr
     assert out.exists()
+    payload = json.loads(out.read_text())
+    assert isinstance(payload, list)
+    assert len(payload) == 1
+    assert payload[0]["value"] == 21.66
+    assert "21.66" not in result.stdout  # did not also print to stdout
+
+
+def test_fetch_ndjson_to_file(sample_table, tmp_path: Path):
+    """--format ndjson --out PATH writes one JSON object per line."""
+    out = tmp_path / "out.ndjson"
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--format", "ndjson", "--out", str(out)])
+    assert result.exit_code == 0, result.stderr
+    assert out.exists()
     lines = [line for line in out.read_text().splitlines() if line.strip()]
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["value"] == 21.66
-    assert "21.66" not in result.stdout  # did not also print to stdout
+    assert "21.66" not in result.stdout
+
+
+def test_fetch_json_empty_result_emits_array():
+    """--format json with no rows emits `[]` (no trailing newline). Exit 0."""
+    empty = pa.schema(
+        [
+            pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+            pa.field("value", pa.float64()),
+            pa.field("quality", pa.int64()),
+            pa.field("tsid", pa.string()),
+            pa.field("location", pa.string()),
+            pa.field("parameter", pa.string()),
+            pa.field("units", pa.string()),
+        ]
+    ).empty_table()
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=empty),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--format", "json"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == []
+    assert result.stdout == "[]"  # no trailing newline
+
+
+def test_fetch_ndjson_empty_result_is_empty():
+    """--format ndjson with no rows emits empty stdout. Exit 0. Locks the
+    contrast with --format json which emits `[]`.
+    """
+    empty = pa.schema(
+        [
+            pa.field("timestamp", pa.timestamp("us", tz="UTC")),
+            pa.field("value", pa.float64()),
+            pa.field("quality", pa.int64()),
+            pa.field("tsid", pa.string()),
+            pa.field("location", pa.string()),
+            pa.field("parameter", pa.string()),
+            pa.field("units", pa.string()),
+        ]
+    ).empty_table()
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=empty),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(app, ["fetch", "T", "--format", "ndjson"])
+    assert result.exit_code == 0
+    assert result.stdout == ""
 
 
 def test_fetch_fail_empty_exits_3_on_empty():
@@ -832,9 +936,10 @@ def test_fetch_latest_flag_reduces_output():
     ):
         result = runner.invoke(app, ["fetch", "A", "B", "--latest", "--format", "json"])
     assert result.exit_code == 0, result.stderr
-    lines = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
-    assert len(lines) == 2
-    by_tsid = {r["tsid"]: r["value"] for r in lines}
+    payload = json.loads(result.stdout)
+    assert isinstance(payload, list)
+    assert len(payload) == 2
+    by_tsid = {r["tsid"]: r["value"] for r in payload}
     assert by_tsid == {"A": 2.0, "B": 20.0}
 
 
