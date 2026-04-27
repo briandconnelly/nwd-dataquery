@@ -201,8 +201,8 @@ def _run[T](
                 delay = retry_backoff * (2**attempt)
                 if not quiet:
                     typer.secho(
-                        f"warning: {_describe(exc)} — retrying in {delay:.1f}s "
-                        f"(attempt {attempt + 1}/{retries})",
+                        f"warning: {_describe(exc)} — retrying in {delay:g}s "
+                        f"(retry {attempt + 1}/{retries})",
                         fg="yellow",
                         err=True,
                     )
