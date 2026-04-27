@@ -79,7 +79,7 @@ nwd-dq --version
 
 Shell completion: `nwd-dq --install-completion` (bash, zsh, fish).
 
-`--format` accepts `csv`, `ndjson` (newline-delimited rows), `parquet`, and `json` (a back-compat alias for `ndjson`; the name is reserved for a future single-document JSON format). Invalid values exit 2 before any request is made.
+`--format` accepts `csv`, `ndjson` (newline-delimited rows), `json` (a single JSON array of row objects), and `parquet`. Invalid values exit 2 before any request is made.
 
 ### Time window
 
