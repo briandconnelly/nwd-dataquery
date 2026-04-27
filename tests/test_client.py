@@ -496,14 +496,33 @@ async def test_fetch_raw_http_error_takes_precedence_over_shape_violation():
     await client.aclose()
 
 
-async def test_fetch_raw_5xx_with_error_body_still_surfaces_data_query_error():
-    """A non-2xx response carrying {"error": ...} keeps the actionable message."""
+async def test_fetch_raw_5xx_with_error_body_raises_http_status_error():
+    """A 5xx with {"error": ...} body raises HTTPStatusError so callers can
+    treat it as transient. The upstream message remains accessible via
+    exc.response.json() for diagnostic display.
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, json={"error": "Service unavailable"})
 
     client = _mock_client(handler)
-    with pytest.raises(DataQueryError, match="Service unavailable"):
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        await client.fetch_raw("T")
+    assert exc_info.value.response.status_code == 503
+    assert exc_info.value.response.json() == {"error": "Service unavailable"}
+    await client.aclose()
+
+
+async def test_fetch_raw_4xx_with_error_body_still_surfaces_data_query_error():
+    """A 4xx with {"error": ...} body still raises DataQueryError. 4xx means
+    the request is wrong; the upstream message is the actionable diagnostic.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "Bad request"})
+
+    client = _mock_client(handler)
+    with pytest.raises(DataQueryError, match="Bad request"):
         await client.fetch_raw("T")
     await client.aclose()
 
