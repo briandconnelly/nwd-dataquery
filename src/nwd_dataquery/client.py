@@ -137,8 +137,8 @@ class AsyncDataQueryClient:
         if lookback is not None and lookback < timedelta(0):
             raise ValueError(f"lookback must be non-negative, got {lookback!r}")
         if start is not None and end is not None:
-            start_utc = start.replace(tzinfo=UTC) if start.tzinfo is None else start
-            end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end
+            start_utc = _to_utc(start)
+            end_utc = _to_utc(end)
             if start_utc > end_utc:
                 raise ValueError(
                     f"start ({start_utc.isoformat()}) is after end ({end_utc.isoformat()})"
@@ -157,9 +157,13 @@ class AsyncDataQueryClient:
         # Post-resolution sanity check: catches cases the explicit-bounds check
         # above can't, e.g. a future `start` defaulted to `end = now()`.
         # Negative `lookback` is rejected upstream so it doesn't reach here.
-        assert start is not None and end is not None
-        resolved_start = start.replace(tzinfo=UTC) if start.tzinfo is None else start
-        resolved_end = end.replace(tzinfo=UTC) if end.tzinfo is None else end
+        if start is None or end is None:  # pragma: no cover
+            # Unreachable given the default-fill block above, but the guard
+            # narrows the type for the post-resolution comparison and avoids
+            # an `assert` (stripped by `python -O`).
+            raise RuntimeError("internal: failed to resolve both start and end after defaults")
+        resolved_start = _to_utc(start)
+        resolved_end = _to_utc(end)
         if resolved_start > resolved_end:
             raise ValueError(
                 f"resolved window is inverted: start ({resolved_start.isoformat()}) "
@@ -308,8 +312,11 @@ class AsyncDataQueryClient:
         )
 
 
+def _to_utc(dt: datetime) -> datetime:
+    """Treat a naive datetime as UTC; return aware-UTC datetimes unchanged."""
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
+
+
 def _iso(dt: datetime) -> str:
     """Format a datetime as ISO-8601 with a Z suffix (server-accepted)."""
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return _to_utc(dt).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
