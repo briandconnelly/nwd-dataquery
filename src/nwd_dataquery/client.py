@@ -149,10 +149,6 @@ class AsyncDataQueryClient:
 
         response.raise_for_status()
 
-        # A 2xx with an error body falls through to here.
-        if isinstance(payload, dict) and "error" in payload:
-            raise DataQueryError(payload["error"])
-
         if not isinstance(payload, dict):
             raise DataQueryError(
                 f"unexpected response payload: expected JSON object, got {type(payload).__name__}"
