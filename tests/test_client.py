@@ -293,6 +293,25 @@ async def test_fetch_raw_rejects_overspecified_window():
     await client.aclose()
 
 
+async def test_fetch_raw_rejects_negative_lookback():
+    """A negative lookback is a caller bug — reject directly, before defaulting."""
+    client = _mock_client(lambda req: httpx.Response(200, json={}))
+    with pytest.raises(ValueError, match="lookback must be non-negative"):
+        await client.fetch_raw("T", lookback=timedelta(days=-7))
+    await client.aclose()
+
+
+async def test_fetch_raw_rejects_future_start_with_end_defaulted():
+    """A future `start` with `end=None` defaults end to now() and yields an
+    inverted resolved window — caught by the post-resolution check.
+    """
+    client = _mock_client(lambda req: httpx.Response(200, json={}))
+    future = datetime(9999, 1, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="resolved window is inverted"):
+        await client.fetch_raw("T", start=future)
+    await client.aclose()
+
+
 async def test_fetch_raw_rejects_start_after_end():
     """fetch_raw raises ValueError when start > end (both aware UTC)."""
     client = _mock_client(lambda req: httpx.Response(200, json={}))
