@@ -13,6 +13,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
+import httpx
 import typer
 
 from . import __version__
@@ -114,6 +115,27 @@ def parse_duration(text: str) -> timedelta:
     n = int(m.group(1))
     unit = m.group(2)
     return _DURATION_UNITS[unit](n)
+
+
+def _describe(exc: httpx.TransportError | httpx.HTTPStatusError) -> str:
+    """Class-aware human-friendly description of a transport/HTTP failure."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        host = exc.request.url.host
+        msg = f"server returned {exc.response.status_code} from {host}"
+        try:
+            body = exc.response.json()
+            if isinstance(body, dict) and "error" in body:
+                msg += f": {body['error']}"
+        except ValueError:
+            pass
+        return msg
+    if isinstance(exc, httpx.ConnectTimeout):
+        return f"connect timeout to {exc.request.url.host}"
+    if isinstance(exc, httpx.ReadTimeout):
+        return f"read timeout from {exc.request.url.host}"
+    if isinstance(exc, httpx.ConnectError):
+        return f"connect failed to {exc.request.url.host}: {exc}"
+    return f"transport error: {exc}"
 
 
 def _client(*, timeout: float, endpoint: str | None) -> AsyncDataQueryClient:

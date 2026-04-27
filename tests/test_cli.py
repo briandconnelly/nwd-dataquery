@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pyarrow as pa
 import pytest
 from typer.testing import CliRunner
@@ -835,3 +836,56 @@ def test_fetch_latest_flag_reduces_output():
     assert len(lines) == 2
     by_tsid = {r["tsid"]: r["value"] for r in lines}
     assert by_tsid == {"A": 2.0, "B": 20.0}
+
+
+def test_describe_for_http_status_error_5xx_with_body():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    resp = httpx.Response(503, json={"error": "Service unavailable"}, request=req)
+    err = httpx.HTTPStatusError("503", request=req, response=resp)
+    assert _describe(err) == "server returned 503 from example.com: Service unavailable"
+
+
+def test_describe_for_http_status_error_4xx_no_body():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    resp = httpx.Response(404, content=b"not found", request=req)
+    err = httpx.HTTPStatusError("404", request=req, response=resp)
+    assert _describe(err) == "server returned 404 from example.com"
+
+
+def test_describe_for_connect_timeout():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    assert (
+        _describe(httpx.ConnectTimeout("timed out", request=req))
+        == "connect timeout to example.com"
+    )
+
+
+def test_describe_for_read_timeout():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    assert (
+        _describe(httpx.ReadTimeout("read timeout", request=req)) == "read timeout from example.com"
+    )
+
+
+def test_describe_for_connect_error():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    msg = _describe(httpx.ConnectError("conn refused", request=req))
+    assert msg.startswith("connect failed to example.com: ")
+
+
+def test_describe_for_other_transport_error():
+    from nwd_dataquery.cli import _describe
+
+    req = httpx.Request("GET", "https://example.com/foo")
+    msg = _describe(httpx.NetworkError("net broke", request=req))
+    assert msg == "transport error: net broke"
