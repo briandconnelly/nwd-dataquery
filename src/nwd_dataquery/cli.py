@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 app = typer.Typer(
     name="nwd-dq",
     help="USACE NWD Dataquery 2.0 CLI.",
-    add_completion=False,
+    add_completion=True,
     no_args_is_help=True,
 )
 

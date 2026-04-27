@@ -77,6 +77,8 @@ nwd-dq fetch LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW \
 nwd-dq --version
 ```
 
+Shell completion: `nwd-dq --install-completion` (bash, zsh, fish).
+
 `--format` accepts `csv`, `ndjson` (newline-delimited rows), `parquet`, and `json` (a back-compat alias for `ndjson`; the name is reserved for a future single-document JSON format). Invalid values exit 2 before any request is made.
 
 ### Time window
