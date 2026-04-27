@@ -7,10 +7,10 @@ pattern so pytest doesn't even import it during collection — that matters
 because `pandas`/`polars` at the top are unconditional imports and would
 break collection in environments where those optional deps aren't installed.
 
-The project's `[tool.ty.src]` config currently scopes ty to `src/` only, so
-the pre-commit ty hook will not check this file automatically. Run
-`uv run ty check tests/typing_check.py` manually to verify. Follow-up
-issue #41 tracks expanding ty's scope to include `tests/`.
+`ty` checks this file via the project's `[tool.ty.src]` config (`include`
+covers both `src/` and `tests/`) and the pre-commit `ty check` hook fires
+on changes here. A future PR that breaks an `@overload` signature or a
+TypedDict shape will fail the hook on this file.
 """
 
 from typing import assert_type
