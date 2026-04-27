@@ -145,7 +145,7 @@ async def test_async_context_manager_closes_session_after_use():
 
     transport = httpx.MockTransport(handler)
     session = httpx.AsyncClient(transport=transport)
-    session.aclose = fake_close  # type: ignore[method-assign]
+    session.aclose = fake_close  # type: ignore[method-assign]  # ty:ignore[invalid-assignment]
 
     # Inject the session so the context manager owns and closes it.
     client = AsyncDataQueryClient()
@@ -171,7 +171,7 @@ async def test_async_client_does_not_accept_timezone_kwarg():
     silently re-introducing the surface that produced #6's data corruption.
     """
     with pytest.raises(TypeError):
-        AsyncDataQueryClient(timezone="GMT")  # type: ignore[call-arg]
+        AsyncDataQueryClient(timezone="GMT")  # type: ignore[call-arg]  # ty:ignore[unknown-argument]
 
 
 def _success_handler(payload):
@@ -248,7 +248,7 @@ async def test_fetch_backend_pandas_returns_pandas_frame():
 async def test_fetch_rejects_unknown_backend():
     client = _mock_client(_success_handler({}))
     with pytest.warns(UnknownTsidWarning), pytest.raises(ValueError, match="unknown backend"):
-        await client.fetch("T", backend="duckdb")  # type: ignore[arg-type]
+        await client.fetch("T", backend="duckdb")  # type: ignore[arg-type]  # ty:ignore[no-matching-overload]
     await client.aclose()
 
 

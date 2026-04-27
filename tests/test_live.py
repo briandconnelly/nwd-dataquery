@@ -33,4 +33,6 @@ async def test_live_describe_lwsc_returns_coordinates():
             "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW",
             lookback=timedelta(days=1),
         )
-    assert meta["LWSC"]["coordinates"]["latitude"] == pytest.approx(47.66, abs=0.5)
+    # `coordinates` is observed in upstream responses but is not part of
+    # LocationEntry's narrow typed contract — see the design choice in PR #42.
+    assert meta["LWSC"]["coordinates"]["latitude"] == pytest.approx(47.66, abs=0.5)  # ty:ignore[invalid-key]

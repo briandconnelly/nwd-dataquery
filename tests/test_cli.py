@@ -18,7 +18,7 @@ def sample_table() -> pa.Table:
 
     return pa.table(
         {
-            "timestamp": pc.assume_timezone(
+            "timestamp": pc.assume_timezone(  # ty:ignore[unresolved-attribute]
                 pa.array(["2026-04-11T18:00:00"], type=pa.string()).cast(pa.timestamp("us")),
                 timezone="UTC",
             ),
@@ -864,7 +864,7 @@ def test_write_csv_no_header_to_buffer(sample_table):
 def _table_from_rows(rows: list[tuple[str, str, float]]) -> pa.Table:
     import pyarrow.compute as pc
 
-    ts = pc.assume_timezone(
+    ts = pc.assume_timezone(  # ty:ignore[unresolved-attribute]
         pa.array([r[0] for r in rows], type=pa.string()).cast(pa.timestamp("us")),
         timezone="UTC",
     )

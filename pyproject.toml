@@ -86,7 +86,7 @@ ignore = ["E501"]  # line-length handled by formatter
 "tests/*" = ["B011"]  # allow `assert` in tests
 
 [tool.ty.src]
-include = ["src"]
+include = ["src", "tests"]
 
 [tool.ty.environment]
 python-version = "3.12"

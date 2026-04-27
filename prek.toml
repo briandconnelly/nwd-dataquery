@@ -30,5 +30,5 @@ hooks = [
 [[repos]]
 repo = "local"
 hooks = [
-    { id = "ty", name = "ty check", entry = "uv run ty check", language = "system", types_or = ["python", "toml"], pass_filenames = false, files = "^(src/|pyproject\\.toml$)" },
+    { id = "ty", name = "ty check", entry = "uv run ty check", language = "system", types_or = ["python", "toml"], pass_filenames = false, files = "^(src/|tests/|pyproject\\.toml$)" },
 ]
