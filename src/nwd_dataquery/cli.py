@@ -7,6 +7,7 @@ import io
 import json
 import re
 import sys
+import time
 from collections.abc import Callable, Coroutine
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -105,6 +106,23 @@ EndpointOpt = Annotated[
     str | None,
     typer.Option(help="Override the Dataquery 2.0 endpoint URL."),
 ]
+QuietOpt = Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")]
+RetriesOpt = Annotated[
+    int,
+    typer.Option(
+        "--retries",
+        min=0,
+        help="Retry attempts on transport/5xx errors.",
+    ),
+]
+RetryBackoffOpt = Annotated[
+    float,
+    typer.Option(
+        "--retry-backoff",
+        min=0.0,
+        help="Base seconds for exponential backoff (1s, 2s, 4s, ...).",
+    ),
+]
 
 
 def parse_duration(text: str) -> timedelta:
@@ -145,15 +163,41 @@ def _client(*, timeout: float, endpoint: str | None) -> AsyncDataQueryClient:
     )
 
 
-def _run[T](coro_factory: Callable[[], Coroutine[Any, Any, T]]) -> T:
-    try:
-        return asyncio.run(coro_factory())
-    except DataQueryError as exc:
-        typer.secho(f"server error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=2) from exc
-    except Exception as exc:
-        typer.secho(f"error: {exc}", fg="red", err=True)
-        raise typer.Exit(code=1) from exc
+def _run[T](
+    coro_factory: Callable[[], Coroutine[Any, Any, T]],
+    *,
+    retries: int = 0,
+    retry_backoff: float = 1.0,
+    quiet: bool = False,
+) -> T:
+    for attempt in range(retries + 1):
+        try:
+            return asyncio.run(coro_factory())
+        except DataQueryError as exc:
+            typer.secho(f"server error: {exc}", fg="red", err=True)
+            raise typer.Exit(code=2) from exc
+        except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code < 500:
+                typer.secho(f"error: {_describe(exc)}", fg="red", err=True)
+                raise typer.Exit(code=1) from exc
+            if attempt < retries:
+                delay = retry_backoff * (2**attempt)
+                if not quiet:
+                    typer.secho(
+                        f"warning: {_describe(exc)} — retrying in {delay:.1f}s "
+                        f"(attempt {attempt + 1}/{retries})",
+                        fg="yellow",
+                        err=True,
+                    )
+                time.sleep(delay)
+                continue
+            suffix = f" (after {retries} retries)" if retries else ""
+            typer.secho(f"error: {_describe(exc)}{suffix}", fg="red", err=True)
+            raise typer.Exit(code=1) from exc
+        except Exception as exc:
+            typer.secho(f"error: {exc}", fg="red", err=True)
+            raise typer.Exit(code=1) from exc
+    raise RuntimeError("unreachable")  # pragma: no cover
 
 
 @app.command()
@@ -183,7 +227,9 @@ def fetch(
     ] = False,
     timeout: TimeoutOpt = 60.0,
     endpoint: EndpointOpt = None,
-    quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
+    retries: RetriesOpt = 2,
+    retry_backoff: RetryBackoffOpt = 1.0,
+    quiet: QuietOpt = False,
     verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Debug logging.")] = False,
     fail_empty: Annotated[
         bool,
@@ -233,7 +279,7 @@ def fetch(
         async with _client(timeout=timeout, endpoint=endpoint) as client:
             return await client.fetch(tsids, start=start, end=end, lookback=lb)
 
-    table = _run(_do)
+    table = _run(_do, retries=retries, retry_backoff=retry_backoff, quiet=quiet)
 
     if latest:
         table = _latest_per_tsid(table)
@@ -273,15 +319,25 @@ def describe(
     lookback: LookbackOpt = None,
     timeout: TimeoutOpt = 60.0,
     endpoint: EndpointOpt = None,
+    retries: RetriesOpt = 2,
+    retry_backoff: RetryBackoffOpt = 1.0,
+    quiet: QuietOpt = False,
 ) -> None:
     """Emit location + tsid metadata as JSON (no values)."""
     lb = _resolve_window_args(start, end, lookback)
+
+    if quiet:
+        import warnings
+
+        from .errors import UnknownTsidWarning
+
+        warnings.simplefilter("ignore", UnknownTsidWarning)
 
     async def _do() -> dict:
         async with _client(timeout=timeout, endpoint=endpoint) as client:
             return await client.describe(tsids, start=start, end=end, lookback=lb)
 
-    meta = _run(_do)
+    meta = _run(_do, retries=retries, retry_backoff=retry_backoff, quiet=quiet)
 
     typer.echo(json.dumps(meta, indent=2, default=str))
 
@@ -298,7 +354,9 @@ def raw(
     ] = None,
     timeout: TimeoutOpt = 60.0,
     endpoint: EndpointOpt = None,
-    quiet: Annotated[bool, typer.Option("-q", "--quiet", help="Suppress warnings.")] = False,
+    retries: RetriesOpt = 2,
+    retry_backoff: RetryBackoffOpt = 1.0,
+    quiet: QuietOpt = False,
 ) -> None:
     """Print the raw upstream JSON payload for one or more tsids."""
     lb = _resolve_window_args(start, end, lookback)
@@ -314,7 +372,7 @@ def raw(
         async with _client(timeout=timeout, endpoint=endpoint) as client:
             return await client.fetch_raw(tsids, start=start, end=end, lookback=lb)
 
-    payload = _run(_do)
+    payload = _run(_do, retries=retries, retry_backoff=retry_backoff, quiet=quiet)
 
     text = json.dumps(payload, indent=2, default=str)
     if out is not None:
