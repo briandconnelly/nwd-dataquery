@@ -24,6 +24,9 @@ def test_all_contains_expected_names():
     assert set(nwd_dataquery.__all__) == {
         "AsyncDataQueryClient",
         "DataQueryError",
+        "DataqueryPayload",
+        "LocationEntry",
+        "TimeseriesEntry",
         "UnknownTsidWarning",
         "__version__",
     }
