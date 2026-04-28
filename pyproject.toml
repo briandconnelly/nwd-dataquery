@@ -20,7 +20,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "aia-chaser>=3.4.0",
+    "aia-chaser>=3.4.1",
     "httpx>=0.28.1",
     "pyarrow>=23.0.1",
     "typer>=0.24.1",
