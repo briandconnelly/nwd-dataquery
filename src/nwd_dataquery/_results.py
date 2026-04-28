@@ -12,6 +12,31 @@ if TYPE_CHECKING:
     from .client import DataQueryPayload
 
 
+def _compute_unknown_tsids(
+    requested: tuple[str, ...],
+    payload: DataQueryPayload,
+) -> tuple[str, ...]:
+    """Return tsids in `requested` not present under any payload location's
+    `timeseries` dict. Order matches `requested`; duplicates collapsed by
+    first occurrence; tsids that appear in the payload are never returned.
+    """
+    present: set[str] = set()
+    for loc_body in payload.values():
+        if not isinstance(loc_body, dict):
+            continue
+        ts = loc_body.get("timeseries") or {}
+        present.update(ts.keys())
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in requested:
+        if t in seen:
+            continue
+        seen.add(t)
+        if t not in present:
+            out.append(t)
+    return tuple(out)
+
+
 @dataclass(frozen=True, slots=True)
 class QueryResult:
     """Result of a `fetch()` call: table + raw payload + request context."""
@@ -29,21 +54,7 @@ class QueryResult:
 
     @property
     def unknown_tsids(self) -> tuple[str, ...]:
-        present: set[str] = set()
-        for loc_body in self.payload.values():
-            if not isinstance(loc_body, dict):
-                continue
-            ts = loc_body.get("timeseries") or {}
-            present.update(ts.keys())
-        seen: set[str] = set()
-        out: list[str] = []
-        for t in self.requested_tsids:
-            if t in seen:
-                continue
-            seen.add(t)
-            if t not in present:
-                out.append(t)
-        return tuple(out)
+        return _compute_unknown_tsids(self.requested_tsids, self.payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,18 +69,4 @@ class MetadataResult:
 
     @property
     def unknown_tsids(self) -> tuple[str, ...]:
-        present: set[str] = set()
-        for loc_body in self.payload.values():
-            if not isinstance(loc_body, dict):
-                continue
-            ts = loc_body.get("timeseries") or {}
-            present.update(ts.keys())
-        seen: set[str] = set()
-        out: list[str] = []
-        for t in self.requested_tsids:
-            if t in seen:
-                continue
-            seen.add(t)
-            if t not in present:
-                out.append(t)
-        return tuple(out)
+        return _compute_unknown_tsids(self.requested_tsids, self.payload)
