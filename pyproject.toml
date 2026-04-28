@@ -1,6 +1,6 @@
 [project]
 name = "nwd-dataquery"
-version = "0.2.0"
+version = "0.3.0"
 description = "Async Python client for the USACE NWD Dataquery 2.0 hydrologic timeseries endpoint."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -25,10 +25,6 @@ dependencies = [
     "pyarrow>=23.0.1",
     "typer>=0.24.1",
 ]
-
-[project.optional-dependencies]
-polars = ["polars>=1.0"]
-pandas = ["pandas>=2.0"]
 
 [project.scripts]
 nwd-dq = "nwd_dataquery.cli:app"
