@@ -118,6 +118,55 @@ class AsyncDataQueryClient:
             self._session = httpx.AsyncClient(**kwargs)
         return self._session
 
+    async def _request_payload(
+        self,
+        tsids: list[str],
+        *,
+        resolved_start: datetime,
+        resolved_end: datetime,
+    ) -> DataQueryPayload:
+        """Issue the HTTP request and return the decoded payload.
+
+        Caller is responsible for: tsid validation, window resolution,
+        and any post-decode warning emission. This helper handles only
+        URL construction, HTTP, JSON decode, and DataQueryError /
+        HTTPStatusError surfacing.
+        """
+        params: dict[str, str] = {
+            "timezone": "GMT",
+            "query": json.dumps(tsids),
+            "startdate": _iso(resolved_start),
+            "enddate": _iso(resolved_end),
+        }
+
+        session = self._get_or_build_session()
+        response = await session.get(self.endpoint, params=params)
+
+        try:
+            payload = response.json()
+        except ValueError:
+            # Body wasn't JSON at all — let an HTTP error take precedence,
+            # otherwise re-raise the decode failure.
+            response.raise_for_status()
+            raise
+
+        # Surface server-reported errors as DataQueryError, but only for
+        # non-5xx responses. A 5xx with an error body is a transient server
+        # failure dressed up with a message — let it raise HTTPStatusError so
+        # callers can retry. The original message remains on
+        # exc.response.json() for diagnostic display.
+        if isinstance(payload, dict) and "error" in payload and response.status_code < 500:
+            raise DataQueryError(payload["error"])
+
+        response.raise_for_status()
+
+        if not isinstance(payload, dict):
+            raise DataQueryError(
+                f"unexpected response payload: expected JSON object, got {type(payload).__name__}"
+            )
+
+        return payload
+
     async def fetch_raw(
         self,
         tsids: str | Sequence[str],
@@ -171,44 +220,9 @@ class AsyncDataQueryClient:
                 f"is after end ({resolved_end.isoformat()})"
             )
 
-        # "GMT" is the only request value that produces timestamps consistent
-        # with the parser's UTC assumption. The upstream silently falls back to
-        # local-sensor time on unknown timezone strings (including "UTC"); see
-        # issue #6 for the live-probe evidence.
-        params: dict[str, str] = {
-            "timezone": "GMT",
-            "query": json.dumps(tsids),
-        }
-        if start is not None:
-            params["startdate"] = _iso(start)
-        if end is not None:
-            params["enddate"] = _iso(end)
-
-        session = self._get_or_build_session()
-        response = await session.get(self.endpoint, params=params)
-
-        try:
-            payload = response.json()
-        except ValueError:
-            # Body wasn't JSON at all — let an HTTP error take precedence,
-            # otherwise re-raise the decode failure.
-            response.raise_for_status()
-            raise
-
-        # Surface server-reported errors as DataQueryError, but only for
-        # non-5xx responses. A 5xx with an error body is a transient server
-        # failure dressed up with a message — let it raise HTTPStatusError so
-        # callers can retry. The original message remains on
-        # exc.response.json() for diagnostic display.
-        if isinstance(payload, dict) and "error" in payload and response.status_code < 500:
-            raise DataQueryError(payload["error"])
-
-        response.raise_for_status()
-
-        if not isinstance(payload, dict):
-            raise DataQueryError(
-                f"unexpected response payload: expected JSON object, got {type(payload).__name__}"
-            )
+        payload = await self._request_payload(
+            tsids, resolved_start=resolved_start, resolved_end=resolved_end
+        )
 
         if not payload:
             warnings.warn(
