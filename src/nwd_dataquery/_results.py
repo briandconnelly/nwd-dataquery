@@ -22,3 +22,7 @@ class QueryResult:
     resolved_window: tuple[datetime, datetime]
     endpoint: str
     warnings: tuple[Warning, ...]
+
+    @property
+    def is_empty(self) -> bool:
+        return self.table.num_rows == 0
