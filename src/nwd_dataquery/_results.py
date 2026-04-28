@@ -44,3 +44,32 @@ class QueryResult:
             if t not in present:
                 out.append(t)
         return tuple(out)
+
+
+@dataclass(frozen=True, slots=True)
+class MetadataResult:
+    """Result of a `describe()` call: metadata-only (no table)."""
+
+    payload: DataQueryPayload
+    requested_tsids: tuple[str, ...]
+    resolved_window: tuple[datetime, datetime]
+    endpoint: str
+    warnings: tuple[Warning, ...]
+
+    @property
+    def unknown_tsids(self) -> tuple[str, ...]:
+        present: set[str] = set()
+        for loc_body in self.payload.values():
+            if not isinstance(loc_body, dict):
+                continue
+            ts = loc_body.get("timeseries") or {}
+            present.update(ts.keys())
+        seen: set[str] = set()
+        out: list[str] = []
+        for t in self.requested_tsids:
+            if t in seen:
+                continue
+            seen.add(t)
+            if t not in present:
+                out.append(t)
+        return tuple(out)
