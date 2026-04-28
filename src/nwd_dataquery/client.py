@@ -9,7 +9,7 @@ import warnings
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from functools import cache
-from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast, overload
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 from urllib.parse import urlsplit
 
 import httpx
@@ -19,9 +19,7 @@ from ._time import to_utc as _to_utc
 from .errors import DataQueryError, UnknownTsidWarning
 
 if TYPE_CHECKING:
-    import pandas as pd
-    import polars as pl
-    import pyarrow as pa
+    from ._results import QueryResult
 
 
 class TimeseriesEntry(TypedDict, total=False):
@@ -167,21 +165,13 @@ class AsyncDataQueryClient:
 
         return payload
 
-    async def fetch_raw(
+    def _resolve_window(
         self,
-        tsids: str | Sequence[str],
-        *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        lookback: timedelta | None = None,
-    ) -> DataQueryPayload:
-        """Return the raw JSON payload for the given tsid(s)."""
-        if isinstance(tsids, str):
-            tsids = [tsids]
-        tsids = list(tsids)
-        if not tsids:
-            raise ValueError("must provide at least one tsid")
-
+        start: datetime | None,
+        end: datetime | None,
+        lookback: timedelta | None,
+    ) -> tuple[datetime, datetime]:
+        """Validate and resolve the (start, end) window. Both returned datetimes are UTC-aware."""
         if start is not None and end is not None and lookback is not None:
             raise ValueError("lookback cannot be combined with both start and end")
         if lookback is not None and lookback < timedelta(0):
@@ -204,13 +194,7 @@ class AsyncDataQueryClient:
         elif start is not None and end is None:
             end = datetime.now(UTC)
 
-        # Post-resolution sanity check: catches cases the explicit-bounds check
-        # above can't, e.g. a future `start` defaulted to `end = now()`.
-        # Negative `lookback` is rejected upstream so it doesn't reach here.
         if start is None or end is None:  # pragma: no cover
-            # Unreachable given the default-fill block above, but the guard
-            # narrows the type for the post-resolution comparison and avoids
-            # an `assert` (stripped by `python -O`).
             raise RuntimeError("internal: failed to resolve both start and end after defaults")
         resolved_start = _to_utc(start)
         resolved_end = _to_utc(end)
@@ -219,6 +203,24 @@ class AsyncDataQueryClient:
                 f"resolved window is inverted: start ({resolved_start.isoformat()}) "
                 f"is after end ({resolved_end.isoformat()})"
             )
+        return resolved_start, resolved_end
+
+    async def fetch_raw(
+        self,
+        tsids: str | Sequence[str],
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        lookback: timedelta | None = None,
+    ) -> DataQueryPayload:
+        """Return the raw JSON payload for the given tsid(s)."""
+        if isinstance(tsids, str):
+            tsids = [tsids]
+        tsids = list(tsids)
+        if not tsids:
+            raise ValueError("must provide at least one tsid")
+
+        resolved_start, resolved_end = self._resolve_window(start, end, lookback)
 
         payload = await self._request_payload(
             tsids, resolved_start=resolved_start, resolved_end=resolved_end
@@ -232,7 +234,6 @@ class AsyncDataQueryClient:
             )
         return payload
 
-    @overload
     async def fetch(
         self,
         tsids: str | Sequence[str],
@@ -240,57 +241,45 @@ class AsyncDataQueryClient:
         start: datetime | None = None,
         end: datetime | None = None,
         lookback: timedelta | None = None,
-        backend: Literal["pyarrow"] = "pyarrow",
-    ) -> pa.Table: ...
-    @overload
-    async def fetch(
-        self,
-        tsids: str | Sequence[str],
-        *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        lookback: timedelta | None = None,
-        backend: Literal["polars"],
-    ) -> pl.DataFrame: ...
-    @overload
-    async def fetch(
-        self,
-        tsids: str | Sequence[str],
-        *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        lookback: timedelta | None = None,
-        backend: Literal["pandas"],
-    ) -> pd.DataFrame: ...
-    async def fetch(
-        self,
-        tsids: str | Sequence[str],
-        *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        lookback: timedelta | None = None,
-        backend: Literal["pyarrow", "polars", "pandas"] = "pyarrow",
-    ) -> Any:
-        """Return a long-format frame in the requested backend.
+    ) -> QueryResult:
+        """Return a QueryResult containing the parsed table, raw payload, and request context.
 
-        Columns: ``timestamp`` (UTC), ``value``, ``quality``, ``tsid``,
-        ``location``, ``parameter``, ``units``.
+        Columns in `result.table`: ``timestamp`` (UTC), ``value``, ``quality``,
+        ``tsid``, ``location``, ``parameter``, ``units``.
         """
-        # Imported lazily so that `import nwd_dataquery` does not pull in
-        # pyarrow on the version-check / metadata-only paths.
         from ._parse import parse_payload
+        from ._results import QueryResult
 
-        payload = await self.fetch_raw(tsids, start=start, end=end, lookback=lookback)
+        if isinstance(tsids, str):
+            tsids = [tsids]
+        tsids = list(tsids)
+        if not tsids:
+            raise ValueError("must provide at least one tsid")
+
+        resolved_start, resolved_end = self._resolve_window(start, end, lookback)
+
+        payload = await self._request_payload(
+            tsids, resolved_start=resolved_start, resolved_end=resolved_end
+        )
+
+        captured_warnings: list[Warning] = []
+        if not payload:
+            w = UnknownTsidWarning(
+                f"Empty response for {tsids!r} — tsid unknown, or no data in window"
+            )
+            warnings.warn(w, stacklevel=2)
+            captured_warnings.append(w)
+
         table = parse_payload(payload)
-        if backend == "pyarrow":
-            return table
-        if backend == "polars":
-            import polars as pl
 
-            return pl.from_arrow(table)
-        if backend == "pandas":
-            return table.to_pandas()
-        raise ValueError(f"unknown backend: {backend!r}")
+        return QueryResult(
+            table=table,
+            payload=payload,
+            requested_tsids=tuple(tsids),
+            resolved_window=(resolved_start, resolved_end),
+            endpoint=self.endpoint,
+            warnings=tuple(captured_warnings),
+        )
 
     async def describe(
         self,

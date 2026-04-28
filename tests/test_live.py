@@ -17,13 +17,13 @@ from nwd_dataquery import AsyncDataQueryClient
 @pytest.mark.live
 async def test_live_fetch_lwsc_elevation_nonempty():
     async with AsyncDataQueryClient() as client:
-        table = await client.fetch(
+        result = await client.fetch(
             "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW",
             lookback=timedelta(days=2),
         )
-    assert isinstance(table, pa.Table)
-    assert table.num_rows > 0
-    assert "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW" in table["tsid"].to_pylist()
+    assert isinstance(result.table, pa.Table)
+    assert result.table.num_rows > 0
+    assert "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW" in result.table["tsid"].to_pylist()
 
 
 @pytest.mark.live
