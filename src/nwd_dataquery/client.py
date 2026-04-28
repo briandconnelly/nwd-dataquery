@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 import httpx
 from aia_chaser import AiaChaser
 
+from ._time import to_utc as _to_utc
 from .errors import DataQueryError, UnknownTsidWarning
 
 if TYPE_CHECKING:
@@ -310,11 +311,6 @@ class AsyncDataQueryClient:
                 if isinstance(body, dict)
             },
         )
-
-
-def _to_utc(dt: datetime) -> datetime:
-    """Treat a naive datetime as UTC; return aware-UTC datetimes unchanged."""
-    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
 
 
 def _iso(dt: datetime) -> str:

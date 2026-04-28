@@ -99,8 +99,8 @@ Both rejections — combining explicit `--lookback` with both `--start` and `--e
 | code | meaning |
 | --- | --- |
 | `0` | success |
-| `1` | transport / unexpected error |
-| `2` | server (`DataQueryError`) error or invalid CLI argument |
+| `1` | transport / unexpected error, including HTTP 4xx and exhausted-retry 5xx |
+| `2` | upstream `DataQueryError` (a `{"error": ...}` body from the server) or invalid CLI argument |
 | `3` | empty result with `--fail-empty` (alias: `--strict`, deprecated) |
 
 Scripting flags: `--no-header` (CSV only) suppresses the header row; `--fail-empty` turns an empty result into a non-zero exit so pipelines can branch on it.
@@ -129,7 +129,7 @@ Pass `--retries 0` to disable retries (snap-fail). `DataQueryError` (a `{"error"
 | `parameter` | `string` | parameter name (`Elev-Lake`, `Flow-In`, …) |
 | `units` | `string` | server-reported units (`FT`, `CFS`, …) |
 
-The return type tracks the requested backend: `fetch()` returns `pyarrow.Table` by default, `polars.DataFrame` with `backend="polars"`, and `pandas.DataFrame` with `backend="pandas"`. `fetch_raw()` and `describe()` return a `DataQueryPayload = dict[str, LocationEntry]` typed shape — import `DataQueryPayload`, `LocationEntry`, `TimeseriesEntry` from `nwd_dataquery` for your own annotations.
+The return type tracks the requested backend: `fetch()` returns `pyarrow.Table` by default, `polars.DataFrame` with `backend="polars"`, and `pandas.DataFrame` with `backend="pandas"`. `fetch_raw()` and `describe()` return a `DataQueryPayload = dict[str, LocationEntry]` typed shape — import `DataQueryPayload`, `LocationEntry`, `TimeseriesEntry` from `nwd_dataquery` for your own annotations. `LocationEntry`'s typed contract is intentionally narrow (only `name` and `timeseries`); the upstream returns additional fields like `coordinates` and `elevation` that are not statically typed — access them via `.get(...)` or `cast()`.
 
 ## TSID anatomy
 
@@ -163,7 +163,7 @@ This package covers only the getjson endpoint — there is no catalog or search 
 
 ## Gotchas
 
-- **Empty payload is ambiguous.** The server returns `{}` for "unknown tsid," "no data in the requested window," *and* for seasonal tsids that aren't currently deployed (e.g. temporary summer gauges). The client always emits `UnknownTsidWarning`; you can't distinguish the cases without out-of-band knowledge.
+- **Empty payload is ambiguous.** The server returns `{}` for "unknown tsid," "no data in the requested window," *and* for seasonal tsids that aren't currently deployed (e.g. temporary summer gauges). `fetch_raw()` emits `UnknownTsidWarning` whenever the upstream body is `{}`; you can't distinguish the cases without out-of-band knowledge. Note: `fetch()` can also return an empty table when the upstream payload has structure but no `values` rows, and that case does not currently warn — check `table.num_rows` if you need to branch.
 - **Everything comes back as `text/plain`.** Both successful responses and server-side errors use `Content-Type: text/plain; charset=UTF-8` and always respond HTTP 200. The client parses the body, checks for a top-level `"error"` key, and raises `DataQueryError` if present.
 - **Wildcards don't work.** `["LWSC.*"]` returns `{}`. Query the UI to discover tsids.
 - **Seasonal stations move in and out of the catalog.** Some station codes only appear in the Dataquery UI while the underlying gauge is physically deployed. Treat your tsid list as a moving target, not a fixed registry.

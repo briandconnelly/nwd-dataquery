@@ -826,6 +826,56 @@ def test_fetch_accepts_iso_with_z_suffix(sample_table):
     assert captured["end"].tzinfo is not None
 
 
+def test_fetch_mixed_naive_aware_inverted_window_exits_2(sample_table):
+    """Mixed naive --end and aware --start where start > end in UTC must exit 2
+    cleanly, not raise TypeError from the naive/aware comparison.
+    """
+    with patch("nwd_dataquery.cli.AsyncDataQueryClient") as client_cls:
+        result = runner.invoke(
+            app,
+            [
+                "fetch",
+                "T",
+                "--start",
+                "2026-04-25T00:00:00+00:00",  # aware
+                "--end",
+                "2026-04-01",  # naive (treated as UTC)
+            ],
+        )
+    assert result.exit_code == 2, result.stderr
+    assert "--start" in result.stderr
+    assert "--end" in result.stderr
+    client_cls.assert_not_called()
+
+
+def test_fetch_mixed_naive_aware_valid_window_succeeds(sample_table):
+    """Mixed naive --start and aware --end with a valid window must succeed,
+    not raise TypeError from the naive/aware comparison.
+    """
+    with (
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
+            new=AsyncMock(return_value=sample_table),
+        ),
+        patch(
+            "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "fetch",
+                "T",
+                "--start",
+                "2026-04-01",  # naive (treated as UTC)
+                "--end",
+                "2026-04-08T00:00:00+00:00",  # aware
+            ],
+        )
+    assert result.exit_code == 0, result.stderr
+
+
 def test_fetch_no_lookback_with_both_endpoints_is_fine(sample_table):
     """Without explicit --lookback, both --start and --end is the canonical happy path."""
     with (
