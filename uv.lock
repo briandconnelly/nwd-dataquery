@@ -12,15 +12,15 @@ resolution-markers = [
 
 [[package]]
 name = "aia-chaser"
-version = "3.4.0"
+version = "3.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d2/e0/2cf340a9c71f4a7ca0945786c0259766917cfa6f1d6d1aba30accdba971a/aia_chaser-3.4.0.tar.gz", hash = "sha256:47b3f64b665661ec320768cd0e467bfe983bfdf9cf96902f1a48a4060064f34d", size = 21412, upload-time = "2026-02-28T20:02:43.372Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/61/931ebdfe340963e1618fe88f43c44aa07118fe897096597c4cc187c9e505/aia_chaser-3.4.1.tar.gz", hash = "sha256:3cc3a155530278fda5d84d2f0db630e9b58e7cfeb834e0c4b8c90ed5c51953a8", size = 21581, upload-time = "2026-04-26T17:38:24.936Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8a/6c/fd5836912b13018b869397109ef1ad1a6f78ca907d21a8be3cf33855a317/aia_chaser-3.4.0-py3-none-any.whl", hash = "sha256:95d08baeb2e76d35e9f9684000f4e66320a82e699b95b528a84ec1c5e7bf1284", size = 22803, upload-time = "2026-02-28T20:02:42.357Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/41/91ea50419dde52f806185e4e93c909a046228e3a1a4269f0789707721253/aia_chaser-3.4.1-py3-none-any.whl", hash = "sha256:714849f01a4550748a0f389ae358ad954d0c0907da7aa93955c85c098d0cf2b9", size = 23063, upload-time = "2026-04-26T17:38:23.527Z" },
 ]
 
 [[package]]
@@ -524,7 +524,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aia-chaser", specifier = ">=3.4.0" },
+    { name = "aia-chaser", specifier = ">=3.4.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.0" },
     { name = "polars", marker = "extra == 'polars'", specifier = ">=1.0" },
