@@ -143,6 +143,20 @@ def test_unknown_tsids_searches_all_locations():
     assert r.unknown_tsids == ("C",)
 
 
+def test_unknown_tsids_skips_non_dict_location_body():
+    """Defensive: a non-dict location body in the payload is skipped, not crashed on."""
+    payload = cast(DataQueryPayload, {"BAD": "not a dict", "LWSC": {"timeseries": {"A": {}}}})
+    r = QueryResult(
+        table=_empty_table(),
+        payload=payload,
+        requested_tsids=("A", "B"),
+        resolved_window=(datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 4, 2, tzinfo=UTC)),
+        endpoint="x",
+        warnings=(),
+    )
+    assert r.unknown_tsids == ("B",)
+
+
 def test_query_result_is_frozen():
     """frozen=True must reject attribute assignment after construction."""
     r = QueryResult(
