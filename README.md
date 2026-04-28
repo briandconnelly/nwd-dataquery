@@ -13,12 +13,10 @@ The underlying endpoint (`https://www.nwd-wc.usace.army.mil/dd/common/web_servic
 ## Install
 
 ```bash
-pip install nwd-dataquery            # core: pyarrow output + CLI
-pip install nwd-dataquery[polars]    # adds polars frame support
-pip install nwd-dataquery[pandas]    # adds pandas frame support
+pip install nwd-dataquery
 ```
 
-Python ≥3.12.
+Python ≥3.12. The package returns a `pyarrow.Table` inside a `QueryResult` — use Arrow's existing converters (`.to_pandas()`, `pl.from_arrow(...)`) for other frame backends.
 
 ### A note on SSL
 
@@ -37,29 +35,31 @@ from nwd_dataquery import AsyncDataQueryClient
 
 async def main():
     async with AsyncDataQueryClient() as client:
-        # Default: last 7 days, pyarrow.Table out
-        table = await client.fetch("LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW")
-        print(table.to_pandas().head())
+        # Default: last 7 days
+        result = await client.fetch("LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW")
+        print(result.table.to_pandas().head())
+        print(f"resolved window: {result.resolved_window}")
+        if result.unknown_tsids:
+            print(f"no data for: {result.unknown_tsids}")
 
-        # Decade backfill in one request
-        backfill = await client.fetch(
-            "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW",
-            start=datetime(2016, 1, 1, tzinfo=timezone.utc),
-            end=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        )
+        # Other backends use Arrow's converters
+        df_polars = __import__("polars").from_arrow(result.table)
+        df_pandas = result.table.to_pandas()
 
         # Metadata only
         meta = await client.describe("LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW")
+        print(meta.payload)
 
 asyncio.run(main())
 ```
 
-Switch frame types:
+The default `pyarrow.Table` is the canonical form. Use Arrow's converters for other backends:
 
 ```python
-tbl = await client.fetch(tsid)                  # pyarrow.Table (default)
-df  = await client.fetch(tsid, backend="polars")  # requires nwd-dataquery[polars]
-df  = await client.fetch(tsid, backend="pandas")  # requires nwd-dataquery[pandas]
+result = await client.fetch(tsid)
+table  = result.table                     # pyarrow.Table
+pandas = result.table.to_pandas()
+polars = pl.from_arrow(result.table)      # requires `pip install polars`
 ```
 
 ## Quick start (CLI)
@@ -117,7 +117,7 @@ Pass `--retries 0` to disable retries (snap-fail). `DataQueryError` (a `{"error"
 
 ## Output schema
 
-`fetch()` returns a long-format frame with columns:
+`fetch()` returns a `QueryResult` whose `.table` is a long-format `pyarrow.Table` with columns:
 
 | column | type | meaning |
 | --- | --- | --- |
@@ -129,7 +129,7 @@ Pass `--retries 0` to disable retries (snap-fail). `DataQueryError` (a `{"error"
 | `parameter` | `string` | parameter name (`Elev-Lake`, `Flow-In`, …) |
 | `units` | `string` | server-reported units (`FT`, `CFS`, …) |
 
-The return type tracks the requested backend: `fetch()` returns `pyarrow.Table` by default, `polars.DataFrame` with `backend="polars"`, and `pandas.DataFrame` with `backend="pandas"`. `fetch_raw()` and `describe()` return a `DataQueryPayload = dict[str, LocationEntry]` typed shape — import `DataQueryPayload`, `LocationEntry`, `TimeseriesEntry` from `nwd_dataquery` for your own annotations. `LocationEntry`'s typed contract is intentionally narrow (only `name` and `timeseries`); the upstream returns additional fields like `coordinates` and `elevation` that are not statically typed — access them via `.get(...)` or `cast()`.
+The return type is always `QueryResult`, with `result.table: pa.Table` as the data payload. `describe()` returns a `MetadataResult` with `result.payload: DataQueryPayload` (per-timeseries `values` stripped). `fetch_raw()` returns the raw `DataQueryPayload` dict directly. Import `QueryResult`, `MetadataResult`, `DataQueryPayload`, `LocationEntry`, `TimeseriesEntry` from `nwd_dataquery` for your own annotations.
 
 ## TSID anatomy
 
