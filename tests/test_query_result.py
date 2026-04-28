@@ -76,3 +76,67 @@ def test_is_empty_false_for_populated_table():
         warnings=(),
     )
     assert result.is_empty is False
+
+
+def _result_with(requested: tuple[str, ...], present_tsids: list[str]) -> QueryResult:
+    """Build a QueryResult whose payload's `timeseries` keys cover `present_tsids`."""
+    payload = cast(
+        DataQueryPayload,
+        {
+            "LWSC": {
+                "name": "X",
+                "timeseries": {
+                    t: {"parameter": "P", "units": "U", "values": []} for t in present_tsids
+                },
+            }
+        },
+    )
+    return QueryResult(
+        table=_empty_table(),
+        payload=payload,
+        requested_tsids=requested,
+        resolved_window=(datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 4, 2, tzinfo=UTC)),
+        endpoint="x",
+        warnings=(),
+    )
+
+
+def test_unknown_tsids_empty_when_all_present():
+    r = _result_with(("A", "B"), present_tsids=["A", "B"])
+    assert r.unknown_tsids == ()
+
+
+def test_unknown_tsids_lists_missing_in_request_order():
+    r = _result_with(("A", "B", "C"), present_tsids=["B"])
+    assert r.unknown_tsids == ("A", "C")
+
+
+def test_unknown_tsids_dedupes_by_first_occurrence():
+    r = _result_with(("A", "B", "A", "C", "B"), present_tsids=[])
+    assert r.unknown_tsids == ("A", "B", "C")
+
+
+def test_unknown_tsids_present_in_payload_never_unknown_even_if_duplicated():
+    # 'A' appears twice in the request and IS in the payload; it must not appear in unknown_tsids.
+    r = _result_with(("A", "B", "A"), present_tsids=["A"])
+    assert r.unknown_tsids == ("B",)
+
+
+def test_unknown_tsids_searches_all_locations():
+    """A tsid is 'present' if it appears under ANY location's timeseries dict."""
+    payload = cast(
+        DataQueryPayload,
+        {
+            "LWSC": {"name": "X", "timeseries": {"A": {}}},
+            "MUDM": {"name": "Y", "timeseries": {"B": {}}},
+        },
+    )
+    r = QueryResult(
+        table=_empty_table(),
+        payload=payload,
+        requested_tsids=("A", "B", "C"),
+        resolved_window=(datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 4, 2, tzinfo=UTC)),
+        endpoint="x",
+        warnings=(),
+    )
+    assert r.unknown_tsids == ("C",)

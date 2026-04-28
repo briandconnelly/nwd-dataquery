@@ -26,3 +26,21 @@ class QueryResult:
     @property
     def is_empty(self) -> bool:
         return self.table.num_rows == 0
+
+    @property
+    def unknown_tsids(self) -> tuple[str, ...]:
+        present: set[str] = set()
+        for loc_body in self.payload.values():
+            if not isinstance(loc_body, dict):
+                continue
+            ts = loc_body.get("timeseries") or {}
+            present.update(ts.keys())
+        seen: set[str] = set()
+        out: list[str] = []
+        for t in self.requested_tsids:
+            if t in seen:
+                continue
+            seen.add(t)
+            if t not in present:
+                out.append(t)
+        return tuple(out)
