@@ -19,7 +19,7 @@ from ._time import to_utc as _to_utc
 from .errors import DataQueryError, UnknownTsidWarning
 
 if TYPE_CHECKING:
-    from ._results import QueryResult
+    from ._results import MetadataResult, QueryResult
 
 
 class TimeseriesEntry(TypedDict, total=False):
@@ -288,18 +288,33 @@ class AsyncDataQueryClient:
         start: datetime | None = None,
         end: datetime | None = None,
         lookback: timedelta | None = None,
-    ) -> DataQueryPayload:
-        """Return location + tsid metadata without the time series values.
-
-        Returns the same shape as `fetch_raw`, but each per-timeseries body
-        has its `values` key stripped. Permitted by `TimeseriesEntry`'s
-        `total=False`.
+    ) -> MetadataResult:
+        """Return a MetadataResult: per-location and per-timeseries metadata,
+        with `values` arrays stripped from each timeseries body.
         """
-        payload = await self.fetch_raw(tsids, start=start, end=end, lookback=lookback)
-        # cast: ty can't statically prove the dict comprehension matches
-        # LocationEntry's TypedDict shape, but the structural construction is
-        # verified by tests/test_client.py::test_describe_returns_metadata_without_values.
-        return cast(
+        from ._results import MetadataResult
+
+        if isinstance(tsids, str):
+            tsids = [tsids]
+        tsids = list(tsids)
+        if not tsids:
+            raise ValueError("must provide at least one tsid")
+
+        resolved_start, resolved_end = self._resolve_window(start, end, lookback)
+
+        payload = await self._request_payload(
+            tsids, resolved_start=resolved_start, resolved_end=resolved_end
+        )
+
+        captured_warnings: list[Warning] = []
+        if not payload:
+            w = UnknownTsidWarning(
+                f"Empty response for {tsids!r} — tsid unknown, or no data in window"
+            )
+            warnings.warn(w, stacklevel=2)
+            captured_warnings.append(w)
+
+        stripped: DataQueryPayload = cast(
             DataQueryPayload,
             {
                 loc: {k: v for k, v in body.items() if k != "timeseries"}
@@ -313,6 +328,14 @@ class AsyncDataQueryClient:
                 for loc, body in payload.items()
                 if isinstance(body, dict)
             },
+        )
+
+        return MetadataResult(
+            payload=stripped,
+            requested_tsids=tuple(tsids),
+            resolved_window=(resolved_start, resolved_end),
+            endpoint=self.endpoint,
+            warnings=tuple(captured_warnings),
         )
 
 

@@ -219,13 +219,13 @@ async def test_describe_returns_metadata_without_values():
         }
     }
     client = _mock_client(_success_handler(payload))
-    meta = await client.describe("T")
+    result = await client.describe("T")
     await client.aclose()
 
-    assert meta["LWSC"]["name"] == "Lake Washington"
-    assert "values" not in meta["LWSC"]["timeseries"]["T"]
-    assert meta["LWSC"]["timeseries"]["T"]["parameter"] == "Elev-Lake"
-    assert meta["LWSC"]["timeseries"]["T"]["units"] == "FT"
+    assert result.payload["LWSC"]["name"] == "Lake Washington"
+    assert "values" not in result.payload["LWSC"]["timeseries"]["T"]
+    assert result.payload["LWSC"]["timeseries"]["T"]["parameter"] == "Elev-Lake"
+    assert result.payload["LWSC"]["timeseries"]["T"]["units"] == "FT"
 
 
 # --- coverage gap tests ---
@@ -602,3 +602,25 @@ async def test_fetch_empty_tsids_raises():
     async with AsyncDataQueryClient() as client:
         with pytest.raises(ValueError, match="at least one tsid"):
             await client.fetch([])
+
+
+async def test_describe_normalizes_bare_string_tsid_to_one_tuple():
+    from unittest.mock import AsyncMock, patch
+
+    with patch(
+        "nwd_dataquery.client.AsyncDataQueryClient._request_payload",
+        new=AsyncMock(return_value={}),
+    ):
+        async with AsyncDataQueryClient() as client:
+            result = await client.describe(
+                "ONLY_TSID",
+                start=datetime(2026, 4, 1, tzinfo=UTC),
+                end=datetime(2026, 4, 2, tzinfo=UTC),
+            )
+    assert result.requested_tsids == ("ONLY_TSID",)
+
+
+async def test_describe_empty_tsids_raises():
+    async with AsyncDataQueryClient() as client:
+        with pytest.raises(ValueError, match="at least one tsid"):
+            await client.describe([])

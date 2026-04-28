@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 from nwd_dataquery.cli import app, parse_duration
 
 if TYPE_CHECKING:
-    from nwd_dataquery import QueryResult
+    from nwd_dataquery import MetadataResult, QueryResult
 
 runner = CliRunner()
 
@@ -26,6 +26,22 @@ def _result_for(table: pa.Table, tsids: tuple[str, ...] = ("T",)) -> "QueryResul
     return QueryResult(
         table=table,
         payload=cast(DataQueryPayload, {}),
+        requested_tsids=tsids,
+        resolved_window=(datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 4, 8, tzinfo=UTC)),
+        endpoint="https://example.invalid",
+        warnings=(),
+    )
+
+
+def _meta_for(payload: dict, tsids: tuple[str, ...] = ("T",)) -> "MetadataResult":
+    from datetime import UTC, datetime
+    from typing import cast
+
+    from nwd_dataquery import MetadataResult
+    from nwd_dataquery.client import DataQueryPayload
+
+    return MetadataResult(
+        payload=cast(DataQueryPayload, payload),
         requested_tsids=tsids,
         resolved_window=(datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 4, 8, tzinfo=UTC)),
         endpoint="https://example.invalid",
@@ -519,7 +535,7 @@ def test_describe_emits_json():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.describe",
-            new=AsyncMock(return_value=meta),
+            new=AsyncMock(return_value=_meta_for(meta)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -638,7 +654,7 @@ def test_describe_endpoint_override():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.describe",
-            new=AsyncMock(return_value=meta),
+            new=AsyncMock(return_value=_meta_for(meta)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -1264,7 +1280,7 @@ def test_describe_quiet_suppresses_warnings(monkeypatch):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.describe",
-            new=AsyncMock(return_value=meta),
+            new=AsyncMock(return_value=_meta_for(meta)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",

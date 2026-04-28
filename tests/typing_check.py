@@ -15,14 +15,14 @@ TypedDict shape will fail the hook on this file.
 
 from typing import assert_type
 
-from nwd_dataquery import AsyncDataQueryClient, DataQueryPayload, QueryResult
+from nwd_dataquery import AsyncDataQueryClient, DataQueryPayload, MetadataResult, QueryResult
 
 
 async def _typing_smoke() -> None:
     client = AsyncDataQueryClient()
 
     assert_type(await client.fetch_raw("T"), DataQueryPayload)
-    assert_type(await client.describe("T"), DataQueryPayload)
+    assert_type(await client.describe("T"), MetadataResult)
 
     # fetch() returns QueryResult (backend= parameter removed in 0.3.0).
     assert_type(await client.fetch("T"), QueryResult)
