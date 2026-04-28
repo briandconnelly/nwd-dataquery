@@ -4,6 +4,7 @@ import nwd_dataquery
 from nwd_dataquery import (
     AsyncDataQueryClient,
     DataQueryError,
+    DataQueryParseError,
     UnknownTsidWarning,
     __version__,
 )
@@ -12,6 +13,7 @@ from nwd_dataquery import (
 def test_public_exports_are_available():
     assert AsyncDataQueryClient is nwd_dataquery.AsyncDataQueryClient
     assert DataQueryError is nwd_dataquery.DataQueryError
+    assert DataQueryParseError is nwd_dataquery.DataQueryParseError
     assert UnknownTsidWarning is nwd_dataquery.UnknownTsidWarning
 
 
@@ -24,6 +26,7 @@ def test_all_contains_expected_names():
     assert set(nwd_dataquery.__all__) == {
         "AsyncDataQueryClient",
         "DataQueryError",
+        "DataQueryParseError",
         "DataQueryPayload",
         "LocationEntry",
         "TimeseriesEntry",

@@ -12,6 +12,15 @@ class DataQueryError(RuntimeError):
     """
 
 
+class DataQueryParseError(RuntimeError):
+    """The upstream payload could not be parsed into a tabular result.
+
+    Raised when row-level shape or timestamp parsing fails. Sibling of
+    ``DataQueryError`` so callers can distinguish server-reported errors
+    from local parse failures.
+    """
+
+
 class UnknownTsidWarning(UserWarning):
     """Empty payload — the tsid doesn't exist or has no data in the window.
 

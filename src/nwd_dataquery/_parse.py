@@ -14,6 +14,8 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
+from .errors import DataQueryParseError
+
 SCHEMA = pa.schema(
     [
         pa.field("timestamp", pa.timestamp("us", tz="UTC")),
@@ -46,6 +48,8 @@ def parse_payload(payload: dict[str, Any]) -> pa.Table:
             units = ts_body.get("units")
             parameter = ts_body.get("parameter")
             for row in ts_body.get("values") or []:
+                if not row:
+                    continue
                 ts_raw.append(row[0])
                 vals.append(row[1] if len(row) > 1 else None)
                 quals.append(row[2] if len(row) > 2 else None)
@@ -57,8 +61,14 @@ def parse_payload(payload: dict[str, Any]) -> pa.Table:
     if not ts_raw:
         return SCHEMA.empty_table()
 
-    parsed = pc.strptime(pa.array(ts_raw), format="%Y-%m-%dT%H:%M:%S", unit="us")  # ty:ignore[unresolved-attribute]
-    parsed = pc.assume_timezone(parsed, "UTC")  # ty:ignore[unresolved-attribute]
+    try:
+        parsed = pc.strptime(pa.array(ts_raw), format="%Y-%m-%dT%H:%M:%S", unit="us")  # ty:ignore[unresolved-attribute]
+        parsed = pc.assume_timezone(parsed, "UTC")  # ty:ignore[unresolved-attribute]
+    except pa.ArrowInvalid as exc:
+        raise DataQueryParseError(
+            f"could not parse timestamp(s) in payload: {exc}; "
+            f"first offending row: tsid={ids[0]!r}, timestamp={ts_raw[0]!r}"
+        ) from exc
 
     return pa.table(
         {

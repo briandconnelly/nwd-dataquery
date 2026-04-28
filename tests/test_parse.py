@@ -94,3 +94,51 @@ def test_non_dict_ts_body_is_skipped():
     }
     table = parse_payload(payload)
     assert table.num_rows == 0
+
+
+def test_empty_value_row_is_skipped():
+    """A row with no elements at all must not crash with IndexError; skip it."""
+    payload = {
+        "LWSC": {
+            "timeseries": {
+                "T": {
+                    "parameter": "Elev-Lake",
+                    "units": "FT",
+                    "values": [
+                        ["2026-04-11T18:00:00", 21.66, 0],
+                        [],  # malformed row
+                        ["2026-04-11T19:00:00", 21.67, 0],
+                    ],
+                }
+            }
+        }
+    }
+    table = parse_payload(payload)
+    assert table.num_rows == 2
+    assert table["value"].to_pylist() == [21.66, 21.67]
+
+
+def test_malformed_timestamp_raises_parse_error():
+    """An unparseable timestamp must surface as DataQueryParseError with context,
+    not a bare ArrowInvalid.
+    """
+    import pytest
+
+    from nwd_dataquery.errors import DataQueryParseError
+
+    payload = {
+        "LWSC": {
+            "timeseries": {
+                "T": {
+                    "parameter": "Elev-Lake",
+                    "units": "FT",
+                    "values": [["not-a-timestamp", 21.66, 0]],
+                }
+            }
+        }
+    }
+    with pytest.raises(DataQueryParseError) as exc_info:
+        parse_payload(payload)
+    msg = str(exc_info.value)
+    assert "not-a-timestamp" in msg
+    assert "T" in msg  # tsid included for context

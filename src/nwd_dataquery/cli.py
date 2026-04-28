@@ -18,6 +18,7 @@ import httpx
 import typer
 
 from . import __version__
+from ._time import to_utc as _to_utc
 from .client import ENDPOINT, AsyncDataQueryClient
 from .errors import DataQueryError
 
@@ -416,7 +417,7 @@ def _resolve_window_args(
             err=True,
         )
         raise typer.Exit(code=2)
-    if start is not None and end is not None and start > end:
+    if start is not None and end is not None and _to_utc(start) > _to_utc(end):
         typer.secho(
             f"error: --start ({start.isoformat()}) is after --end ({end.isoformat()})",
             fg="red",

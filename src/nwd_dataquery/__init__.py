@@ -11,7 +11,7 @@ from .client import (
     LocationEntry,
     TimeseriesEntry,
 )
-from .errors import DataQueryError, UnknownTsidWarning
+from .errors import DataQueryError, DataQueryParseError, UnknownTsidWarning
 
 try:
     __version__ = _pkg_version("nwd-dataquery")
@@ -21,6 +21,7 @@ except PackageNotFoundError:
 __all__ = [
     "AsyncDataQueryClient",
     "DataQueryError",
+    "DataQueryParseError",
     "DataQueryPayload",
     "LocationEntry",
     "TimeseriesEntry",
