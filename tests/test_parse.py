@@ -142,3 +142,97 @@ def test_malformed_timestamp_raises_parse_error():
     msg = str(exc_info.value)
     assert "not-a-timestamp" in msg
     assert "T" in msg  # tsid included for context
+
+
+def test_find_first_bad_timestamp_returns_index_of_first_bad():
+    from nwd_dataquery._parse import _find_first_bad_timestamp
+
+    assert (
+        _find_first_bad_timestamp(
+            [
+                "2026-04-11T18:00:00",
+                "2026-04-11T19:00:00",
+                "garbage",
+                "2026-04-11T20:00:00",
+            ]
+        )
+        == 2
+    )
+
+
+def test_find_first_bad_timestamp_returns_none_when_all_parse():
+    """The defensive None-return path: every entry parses in Python, so the
+    Arrow failure (if any) cannot be attributed to a single row. The caller
+    must not claim an offending row in this case.
+    """
+    from nwd_dataquery._parse import _find_first_bad_timestamp
+
+    assert _find_first_bad_timestamp(["2026-04-11T18:00:00", "2026-04-11T19:00:00"]) is None
+
+
+def test_arrow_failure_with_no_pinpointable_row_drops_offending_claim(monkeypatch):
+    """When Arrow fails but the Python fallback can't identify a single bad
+    row, the error must surface the underlying parse failure without falsely
+    claiming a specific 'offending row'.
+    """
+    import pyarrow as pa
+    import pytest
+
+    from nwd_dataquery import _parse
+    from nwd_dataquery.errors import DataQueryParseError
+
+    def _raise_arrow_invalid(*args, **kwargs):
+        raise pa.ArrowInvalid("simulated arrow failure")
+
+    monkeypatch.setattr(_parse.pc, "strptime", _raise_arrow_invalid)
+
+    payload = {
+        "LWSC": {
+            "timeseries": {
+                "T": {
+                    "parameter": "Elev-Lake",
+                    "units": "FT",
+                    "values": [["2026-04-11T18:00:00", 21.66, 0]],
+                }
+            }
+        }
+    }
+    with pytest.raises(DataQueryParseError) as exc_info:
+        parse_payload(payload)
+    msg = str(exc_info.value)
+    assert "simulated arrow failure" in msg
+    assert "offending row" not in msg
+    assert "tsid=" not in msg
+
+
+def test_malformed_timestamp_identifies_actual_offending_row():
+    """The error message must name the row that actually failed to parse,
+    not the first row collected. Asserts the bad timestamp appears AND an
+    earlier good timestamp does NOT, so the test fails if the implementation
+    falls back to reporting row 0.
+    """
+    import pytest
+
+    from nwd_dataquery.errors import DataQueryParseError
+
+    payload = {
+        "LWSC": {
+            "timeseries": {
+                "T": {
+                    "parameter": "Elev-Lake",
+                    "units": "FT",
+                    "values": [
+                        ["2026-04-11T18:00:00", 21.66, 0],
+                        ["2026-04-11T19:00:00", 21.67, 0],
+                        ["bad-timestamp-row-2", 21.68, 0],
+                    ],
+                }
+            }
+        }
+    }
+    with pytest.raises(DataQueryParseError) as exc_info:
+        parse_payload(payload)
+    msg = str(exc_info.value)
+    assert "bad-timestamp-row-2" in msg
+    assert "2026-04-11T18:00:00" not in msg
+    assert "2026-04-11T19:00:00" not in msg

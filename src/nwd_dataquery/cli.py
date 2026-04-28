@@ -406,9 +406,12 @@ def _resolve_window_args(
 ) -> timedelta | None:
     """Validate window args and parse `lookback` into a timedelta.
 
-    Rejects the overspecified case (`--start`, `--end`, and `--lookback` all given)
-    with `typer.Exit(code=2)`. Returns `None` when `lookback` is omitted so the
-    library layer can apply its own default.
+    Rejects two argument-error cases with `typer.Exit(code=2)`: the
+    overspecified case (`--start`, `--end`, and `--lookback` all given), and
+    the inverted-window case (`--start` later than `--end` after UTC
+    normalization, which makes naive/aware mixes safe to compare). Returns
+    `None` when `lookback` is omitted so the library layer can apply its own
+    default.
     """
     if start is not None and end is not None and lookback is not None:
         typer.secho(

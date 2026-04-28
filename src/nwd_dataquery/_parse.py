@@ -9,12 +9,15 @@ strings that represent UTC when the server was asked with timezone=GMT.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import pyarrow as pa
 import pyarrow.compute as pc
 
 from .errors import DataQueryParseError
+
+_TS_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 SCHEMA = pa.schema(
     [
@@ -62,12 +65,17 @@ def parse_payload(payload: dict[str, Any]) -> pa.Table:
         return SCHEMA.empty_table()
 
     try:
-        parsed = pc.strptime(pa.array(ts_raw), format="%Y-%m-%dT%H:%M:%S", unit="us")  # ty:ignore[unresolved-attribute]
+        parsed = pc.strptime(pa.array(ts_raw), format=_TS_FORMAT, unit="us")  # ty:ignore[unresolved-attribute]
         parsed = pc.assume_timezone(parsed, "UTC")  # ty:ignore[unresolved-attribute]
     except pa.ArrowInvalid as exc:
+        # Slow-path: re-parse row-by-row in Python to identify the actual
+        # offending row. Only runs when the payload is already broken.
+        bad_index = _find_first_bad_timestamp(ts_raw)
+        if bad_index is None:
+            raise DataQueryParseError(f"could not parse timestamp(s) in payload: {exc}") from exc
         raise DataQueryParseError(
-            f"could not parse timestamp(s) in payload: {exc}; "
-            f"first offending row: tsid={ids[0]!r}, timestamp={ts_raw[0]!r}"
+            f"could not parse timestamp in payload: {exc}; "
+            f"offending row: tsid={ids[bad_index]!r}, timestamp={ts_raw[bad_index]!r}"
         ) from exc
 
     return pa.table(
@@ -82,3 +90,16 @@ def parse_payload(payload: dict[str, Any]) -> pa.Table:
         },
         schema=SCHEMA,
     )
+
+
+def _find_first_bad_timestamp(ts_raw: list[str]) -> int | None:
+    """Return the index of the first timestamp that fails Python's strptime,
+    or None if the Python parser accepts all of them (meaning the Arrow
+    failure was due to something else, e.g. type or length mismatch).
+    """
+    for i, ts in enumerate(ts_raw):
+        try:
+            datetime.strptime(ts, _TS_FORMAT)
+        except (TypeError, ValueError):
+            return i
+    return None
