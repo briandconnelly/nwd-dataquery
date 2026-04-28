@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 import pyarrow as pa
+import pytest
 
 from nwd_dataquery._results import QueryResult
 from nwd_dataquery.client import DataQueryPayload
@@ -140,3 +141,17 @@ def test_unknown_tsids_searches_all_locations():
         warnings=(),
     )
     assert r.unknown_tsids == ("C",)
+
+
+def test_query_result_is_frozen():
+    """frozen=True must reject attribute assignment after construction."""
+    r = QueryResult(
+        table=_empty_table(),
+        payload={},
+        requested_tsids=("T",),
+        resolved_window=(datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 4, 2, tzinfo=UTC)),
+        endpoint="x",
+        warnings=(),
+    )
+    with pytest.raises((AttributeError, TypeError)):
+        r.endpoint = "y"  # type: ignore[misc]  # ty:ignore[invalid-assignment]
