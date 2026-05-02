@@ -7,14 +7,16 @@ import logging
 import ssl
 import warnings
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import cache
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any, TypedDict
 from urllib.parse import urlsplit
 
 import httpx
 from aia_chaser import AiaChaser
 
+from ._time import is_window_inverted as _is_window_inverted
 from ._time import to_utc as _to_utc
 from .errors import DataQueryError, UnknownTsidWarning
 
@@ -57,6 +59,22 @@ logger = logging.getLogger(__name__)
 
 ENDPOINT = "https://www.nwd-wc.usace.army.mil/dd/common/web_service/webexec/getjson"
 DEFAULT_LOOKBACK = timedelta(days=7)
+
+
+@dataclass(frozen=True, slots=True)
+class _ExecuteOutcome:
+    """Internal: the shared output of the request prelude.
+
+    Carries the four pieces of context that all three public methods
+    (``fetch_raw``, ``fetch``, ``describe``) need to construct their return
+    shape: the decoded payload, the normalized tsid tuple, the resolved UTC
+    window, and any warnings emitted during the call.
+    """
+
+    payload: DataQueryPayload
+    requested_tsids: tuple[str, ...]
+    resolved_window: tuple[datetime, datetime]
+    warnings: tuple[Warning, ...]
 
 
 def _ssl_context_for(endpoint: str) -> ssl.SSLContext:
@@ -176,13 +194,12 @@ class AsyncDataQueryClient:
             raise ValueError("lookback cannot be combined with both start and end")
         if lookback is not None and lookback < timedelta(0):
             raise ValueError(f"lookback must be non-negative, got {lookback!r}")
-        if start is not None and end is not None:
+        if start is not None and end is not None and _is_window_inverted(start, end):
             start_utc = _to_utc(start)
             end_utc = _to_utc(end)
-            if start_utc > end_utc:
-                raise ValueError(
-                    f"start ({start_utc.isoformat()}) is after end ({end_utc.isoformat()})"
-                )
+            raise ValueError(
+                f"start ({start_utc.isoformat()}) is after end ({end_utc.isoformat()})"
+            )
         if lookback is None:
             lookback = DEFAULT_LOOKBACK
 
@@ -205,15 +222,23 @@ class AsyncDataQueryClient:
             )
         return resolved_start, resolved_end
 
-    async def fetch_raw(
+    async def _execute(
         self,
         tsids: str | Sequence[str],
         *,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        lookback: timedelta | None = None,
-    ) -> DataQueryPayload:
-        """Return the raw JSON payload for the given tsid(s)."""
+        start: datetime | None,
+        end: datetime | None,
+        lookback: timedelta | None,
+    ) -> _ExecuteOutcome:
+        """Shared prelude for every public fetch method.
+
+        Normalizes the tsids argument, resolves the window, issues the request,
+        and emits/captures the empty-payload warning. Public methods compose
+        the returned outcome into their own return shape.
+
+        ``stacklevel=3`` on the warning skips this method and the public method
+        that called it, landing on the user's call site.
+        """
         if isinstance(tsids, str):
             tsids = [tsids]
         tsids = list(tsids)
@@ -226,13 +251,32 @@ class AsyncDataQueryClient:
             tsids, resolved_start=resolved_start, resolved_end=resolved_end
         )
 
+        captured: list[Warning] = []
         if not payload:
-            warnings.warn(
-                f"Empty response for {tsids!r} — tsid unknown, or no data in window",
-                UnknownTsidWarning,
-                stacklevel=2,
+            w = UnknownTsidWarning(
+                f"Empty response for {tsids!r} — tsid unknown, or no data in window"
             )
-        return payload
+            warnings.warn(w, stacklevel=3)
+            captured.append(w)
+
+        return _ExecuteOutcome(
+            payload=payload,
+            requested_tsids=tuple(tsids),
+            resolved_window=(resolved_start, resolved_end),
+            warnings=tuple(captured),
+        )
+
+    async def fetch_raw(
+        self,
+        tsids: str | Sequence[str],
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        lookback: timedelta | None = None,
+    ) -> DataQueryPayload:
+        """Return the raw JSON payload for the given tsid(s)."""
+        outcome = await self._execute(tsids, start=start, end=end, lookback=lookback)
+        return outcome.payload
 
     async def fetch(
         self,
@@ -250,35 +294,14 @@ class AsyncDataQueryClient:
         from ._parse import parse_payload
         from ._results import QueryResult
 
-        if isinstance(tsids, str):
-            tsids = [tsids]
-        tsids = list(tsids)
-        if not tsids:
-            raise ValueError("must provide at least one tsid")
-
-        resolved_start, resolved_end = self._resolve_window(start, end, lookback)
-
-        payload = await self._request_payload(
-            tsids, resolved_start=resolved_start, resolved_end=resolved_end
-        )
-
-        captured_warnings: list[Warning] = []
-        if not payload:
-            w = UnknownTsidWarning(
-                f"Empty response for {tsids!r} — tsid unknown, or no data in window"
-            )
-            warnings.warn(w, stacklevel=2)
-            captured_warnings.append(w)
-
-        table = parse_payload(payload)
-
+        outcome = await self._execute(tsids, start=start, end=end, lookback=lookback)
         return QueryResult(
-            table=table,
-            payload=payload,
-            requested_tsids=tuple(tsids),
-            resolved_window=(resolved_start, resolved_end),
+            table=parse_payload(outcome.payload),
+            payload=outcome.payload,
+            requested_tsids=outcome.requested_tsids,
+            resolved_window=outcome.resolved_window,
             endpoint=self.endpoint,
-            warnings=tuple(captured_warnings),
+            warnings=outcome.warnings,
         )
 
     async def describe(
@@ -294,48 +317,13 @@ class AsyncDataQueryClient:
         """
         from ._results import MetadataResult
 
-        if isinstance(tsids, str):
-            tsids = [tsids]
-        tsids = list(tsids)
-        if not tsids:
-            raise ValueError("must provide at least one tsid")
-
-        resolved_start, resolved_end = self._resolve_window(start, end, lookback)
-
-        payload = await self._request_payload(
-            tsids, resolved_start=resolved_start, resolved_end=resolved_end
-        )
-
-        captured_warnings: list[Warning] = []
-        if not payload:
-            w = UnknownTsidWarning(
-                f"Empty response for {tsids!r} — tsid unknown, or no data in window"
-            )
-            warnings.warn(w, stacklevel=2)
-            captured_warnings.append(w)
-
-        stripped: DataQueryPayload = cast(
-            DataQueryPayload,
-            {
-                loc: {k: v for k, v in body.items() if k != "timeseries"}
-                | {
-                    "timeseries": {
-                        t: {k: v for k, v in tb.items() if k != "values"}
-                        for t, tb in (body.get("timeseries") or {}).items()
-                        if isinstance(tb, dict)
-                    }
-                }
-                for loc, body in payload.items()
-                if isinstance(body, dict)
-            },
-        )
-
-        return MetadataResult(
-            payload=stripped,
-            requested_tsids=tuple(tsids),
-            resolved_window=(resolved_start, resolved_end),
+        outcome = await self._execute(tsids, start=start, end=end, lookback=lookback)
+        return MetadataResult.from_payload(
+            outcome.payload,
+            requested_tsids=outcome.requested_tsids,
+            resolved_window=outcome.resolved_window,
             endpoint=self.endpoint,
-            warnings=tuple(captured_warnings),
+            warnings=outcome.warnings,
         )
 
 

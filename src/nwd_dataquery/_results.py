@@ -4,12 +4,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     import pyarrow as pa
 
     from .client import DataQueryPayload
+
+
+def _strip_values(payload: DataQueryPayload) -> DataQueryPayload:
+    """Return the payload with ``values`` arrays removed from each timeseries
+    body — the metadata view consumed by ``describe()``.
+    """
+    return cast(
+        "DataQueryPayload",
+        {
+            loc: {k: v for k, v in body.items() if k != "timeseries"}
+            | {
+                "timeseries": {
+                    t: {k: v for k, v in tb.items() if k != "values"}
+                    for t, tb in (body.get("timeseries") or {}).items()
+                    if isinstance(tb, dict)
+                }
+            }
+            for loc, body in payload.items()
+            if isinstance(body, dict)
+        },
+    )
 
 
 def _compute_unknown_tsids(
@@ -68,6 +89,27 @@ class MetadataResult:
     resolved_window: tuple[datetime, datetime]
     endpoint: str
     warnings: tuple[Warning, ...]
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: DataQueryPayload,
+        *,
+        requested_tsids: tuple[str, ...],
+        resolved_window: tuple[datetime, datetime],
+        endpoint: str,
+        warnings: tuple[Warning, ...],
+    ) -> MetadataResult:
+        """Construct a MetadataResult from a raw payload by stripping
+        ``values`` arrays from each timeseries body.
+        """
+        return cls(
+            payload=_strip_values(payload),
+            requested_tsids=requested_tsids,
+            resolved_window=resolved_window,
+            endpoint=endpoint,
+            warnings=warnings,
+        )
 
     @property
     def unknown_tsids(self) -> tuple[str, ...]:
