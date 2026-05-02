@@ -15,21 +15,14 @@ TypedDict shape will fail the hook on this file.
 
 from typing import assert_type
 
-import pandas as pd
-import polars as pl
-import pyarrow as pa
-
-from nwd_dataquery import AsyncDataQueryClient, DataQueryPayload
+from nwd_dataquery import AsyncDataQueryClient, DataQueryPayload, MetadataResult, QueryResult
 
 
 async def _typing_smoke() -> None:
     client = AsyncDataQueryClient()
 
     assert_type(await client.fetch_raw("T"), DataQueryPayload)
-    assert_type(await client.describe("T"), DataQueryPayload)
+    assert_type(await client.describe("T"), MetadataResult)
 
-    # Default backend is pyarrow.
-    assert_type(await client.fetch("T"), pa.Table)
-    assert_type(await client.fetch("T", backend="pyarrow"), pa.Table)
-    assert_type(await client.fetch("T", backend="polars"), pl.DataFrame)
-    assert_type(await client.fetch("T", backend="pandas"), pd.DataFrame)
+    # fetch() returns QueryResult (backend= parameter removed in 0.3.0).
+    assert_type(await client.fetch("T"), QueryResult)

@@ -295,7 +295,8 @@ def fetch(
 
     async def _do() -> pa.Table:
         async with _client(timeout=timeout, endpoint=endpoint) as client:
-            return await client.fetch(tsids, start=start, end=end, lookback=lb)
+            result = await client.fetch(tsids, start=start, end=end, lookback=lb)
+            return result.table
 
     table = _run(_do, retries=retries, retry_backoff=retry_backoff, quiet=quiet)
 
@@ -353,7 +354,8 @@ def describe(
 
     async def _do() -> dict:
         async with _client(timeout=timeout, endpoint=endpoint) as client:
-            return await client.describe(tsids, start=start, end=end, lookback=lb)
+            result = await client.describe(tsids, start=start, end=end, lookback=lb)
+            return result.payload
 
     meta = _run(_do, retries=retries, retry_backoff=retry_backoff, quiet=quiet)
 

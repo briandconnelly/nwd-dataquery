@@ -195,61 +195,12 @@ async def test_fetch_returns_pyarrow_table_by_default():
         }
     }
     client = _mock_client(_success_handler(payload))
-    table = await client.fetch("LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW")
+    result = await client.fetch("LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW")
     await client.aclose()
 
-    assert isinstance(table, pa.Table)
-    assert table.num_rows == 1
-    assert table["value"][0].as_py() == 21.66
-
-
-async def test_fetch_backend_polars_returns_polars_frame():
-    pl = pytest.importorskip("polars")
-    payload = {
-        "LWSC": {
-            "name": "X",
-            "timeseries": {
-                "T": {
-                    "parameter": "P",
-                    "units": "U",
-                    "values": [["2026-04-11T18:00:00", 1.0, 0]],
-                }
-            },
-        }
-    }
-    client = _mock_client(_success_handler(payload))
-    df = await client.fetch("T", backend="polars")
-    await client.aclose()
-    assert isinstance(df, pl.DataFrame)
-    assert df.shape == (1, 7)
-
-
-async def test_fetch_backend_pandas_returns_pandas_frame():
-    pd = pytest.importorskip("pandas")
-    payload = {
-        "LWSC": {
-            "name": "X",
-            "timeseries": {
-                "T": {
-                    "parameter": "P",
-                    "units": "U",
-                    "values": [["2026-04-11T18:00:00", 1.0, 0]],
-                }
-            },
-        }
-    }
-    client = _mock_client(_success_handler(payload))
-    df = await client.fetch("T", backend="pandas")
-    await client.aclose()
-    assert isinstance(df, pd.DataFrame)
-    assert df.shape == (1, 7)
-
-
-async def test_fetch_rejects_unknown_backend():
-    client = _mock_client(_success_handler({}))
-    with pytest.warns(UnknownTsidWarning), pytest.raises(ValueError, match="unknown backend"):
-        await client.fetch("T", backend="duckdb")  # type: ignore[arg-type]  # ty:ignore[no-matching-overload]
-    await client.aclose()
+    assert isinstance(result.table, pa.Table)
+    assert result.table.num_rows == 1
+    assert result.table["value"][0].as_py() == 21.66
 
 
 async def test_describe_returns_metadata_without_values():
@@ -268,13 +219,13 @@ async def test_describe_returns_metadata_without_values():
         }
     }
     client = _mock_client(_success_handler(payload))
-    meta = await client.describe("T")
+    result = await client.describe("T")
     await client.aclose()
 
-    assert meta["LWSC"]["name"] == "Lake Washington"
-    assert "values" not in meta["LWSC"]["timeseries"]["T"]
-    assert meta["LWSC"]["timeseries"]["T"]["parameter"] == "Elev-Lake"
-    assert meta["LWSC"]["timeseries"]["T"]["units"] == "FT"
+    assert result.payload["LWSC"]["name"] == "Lake Washington"
+    assert "values" not in result.payload["LWSC"]["timeseries"]["T"]
+    assert result.payload["LWSC"]["timeseries"]["T"]["parameter"] == "Elev-Lake"
+    assert result.payload["LWSC"]["timeseries"]["T"]["units"] == "FT"
 
 
 # --- coverage gap tests ---
@@ -627,3 +578,49 @@ async def test_ssl_context_cached_per_origin_not_full_url(monkeypatch):
     assert a is b  # same origin → same cached context
     assert a is not c  # different origin → distinct context
     assert fetched_urls == ["https://example.com", "https://other.example.com"]
+
+
+async def test_fetch_normalizes_bare_string_tsid_to_one_tuple():
+    """A bare-string tsids argument lands as a 1-tuple in result.requested_tsids."""
+    from unittest.mock import AsyncMock, patch
+
+    with patch(
+        "nwd_dataquery.client.AsyncDataQueryClient._request_payload",
+        new=AsyncMock(return_value={}),
+    ):
+        async with AsyncDataQueryClient() as client:
+            result = await client.fetch(
+                "ONLY_TSID",
+                start=datetime(2026, 4, 1, tzinfo=UTC),
+                end=datetime(2026, 4, 2, tzinfo=UTC),
+            )
+    assert result.requested_tsids == ("ONLY_TSID",)
+
+
+async def test_fetch_empty_tsids_raises():
+    """fetch() rejects an empty tsids argument before any HTTP work."""
+    async with AsyncDataQueryClient() as client:
+        with pytest.raises(ValueError, match="at least one tsid"):
+            await client.fetch([])
+
+
+async def test_describe_normalizes_bare_string_tsid_to_one_tuple():
+    from unittest.mock import AsyncMock, patch
+
+    with patch(
+        "nwd_dataquery.client.AsyncDataQueryClient._request_payload",
+        new=AsyncMock(return_value={}),
+    ):
+        async with AsyncDataQueryClient() as client:
+            result = await client.describe(
+                "ONLY_TSID",
+                start=datetime(2026, 4, 1, tzinfo=UTC),
+                end=datetime(2026, 4, 2, tzinfo=UTC),
+            )
+    assert result.requested_tsids == ("ONLY_TSID",)
+
+
+async def test_describe_empty_tsids_raises():
+    async with AsyncDataQueryClient() as client:
+        with pytest.raises(ValueError, match="at least one tsid"):
+            await client.describe([])

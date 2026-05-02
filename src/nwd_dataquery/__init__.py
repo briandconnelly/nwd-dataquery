@@ -5,6 +5,7 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
+from ._results import MetadataResult, QueryResult
 from .client import (
     AsyncDataQueryClient,
     DataQueryPayload,
@@ -24,6 +25,8 @@ __all__ = [
     "DataQueryParseError",
     "DataQueryPayload",
     "LocationEntry",
+    "MetadataResult",
+    "QueryResult",
     "TimeseriesEntry",
     "UnknownTsidWarning",
     "__version__",

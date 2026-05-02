@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -9,7 +10,43 @@ from typer.testing import CliRunner
 
 from nwd_dataquery.cli import app, parse_duration
 
+if TYPE_CHECKING:
+    from nwd_dataquery import MetadataResult, QueryResult
+
 runner = CliRunner()
+
+
+def _result_for(table: pa.Table, tsids: tuple[str, ...] = ("T",)) -> "QueryResult":
+    from datetime import UTC, datetime
+    from typing import cast
+
+    from nwd_dataquery import QueryResult
+    from nwd_dataquery.client import DataQueryPayload
+
+    return QueryResult(
+        table=table,
+        payload=cast(DataQueryPayload, {}),
+        requested_tsids=tsids,
+        resolved_window=(datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 4, 8, tzinfo=UTC)),
+        endpoint="https://example.invalid",
+        warnings=(),
+    )
+
+
+def _meta_for(payload: dict, tsids: tuple[str, ...] = ("T",)) -> "MetadataResult":
+    from datetime import UTC, datetime
+    from typing import cast
+
+    from nwd_dataquery import MetadataResult
+    from nwd_dataquery.client import DataQueryPayload
+
+    return MetadataResult(
+        payload=cast(DataQueryPayload, payload),
+        requested_tsids=tsids,
+        resolved_window=(datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 4, 8, tzinfo=UTC)),
+        endpoint="https://example.invalid",
+        warnings=(),
+    )
 
 
 @pytest.fixture
@@ -58,7 +95,7 @@ def test_fetch_csv_to_stdout(sample_table):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -76,7 +113,7 @@ def test_fetch_ndjson_to_stdout(sample_table):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -97,7 +134,7 @@ def test_fetch_json_to_stdout(sample_table):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -136,7 +173,7 @@ def test_fetch_parquet_to_file(sample_table, tmp_path: Path):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -157,7 +194,7 @@ def test_fetch_csv_to_file(sample_table, tmp_path: Path):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -179,7 +216,7 @@ def test_fetch_json_to_file(sample_table, tmp_path: Path):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -202,7 +239,7 @@ def test_fetch_ndjson_to_file(sample_table, tmp_path: Path):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -235,7 +272,7 @@ def test_fetch_json_empty_result_emits_array():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=empty),
+            new=AsyncMock(return_value=_result_for(empty)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -266,7 +303,7 @@ def test_fetch_ndjson_empty_result_is_empty():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=empty),
+            new=AsyncMock(return_value=_result_for(empty)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -294,7 +331,7 @@ def test_fetch_fail_empty_exits_3_on_empty():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=empty),
+            new=AsyncMock(return_value=_result_for(empty)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -321,7 +358,7 @@ def test_fetch_strict_quiet_suppresses_deprecation_warning():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=empty),
+            new=AsyncMock(return_value=_result_for(empty)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -350,7 +387,7 @@ def test_fetch_strict_still_works_but_warns():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=empty),
+            new=AsyncMock(return_value=_result_for(empty)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -498,7 +535,7 @@ def test_describe_emits_json():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.describe",
-            new=AsyncMock(return_value=meta),
+            new=AsyncMock(return_value=_meta_for(meta)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -525,7 +562,7 @@ def test_fetch_quiet_suppresses_warnings(sample_table):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -541,7 +578,7 @@ def test_fetch_verbose_enables_logging(sample_table):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -557,7 +594,7 @@ def test_fetch_endpoint_override(sample_table):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -617,7 +654,7 @@ def test_describe_endpoint_override():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.describe",
-            new=AsyncMock(return_value=meta),
+            new=AsyncMock(return_value=_meta_for(meta)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -687,7 +724,7 @@ def test_fetch_csv_no_header_to_stdout(sample_table):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -705,7 +742,7 @@ def test_fetch_csv_no_header_to_file(sample_table, tmp_path: Path):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -799,7 +836,7 @@ def test_fetch_accepts_iso_with_z_suffix(sample_table):
     async def fake_fetch(self, tsids, *, start=None, end=None, lookback=None):
         captured["start"] = start
         captured["end"] = end
-        return sample_table
+        return _result_for(sample_table)
 
     with (
         patch("nwd_dataquery.cli.AsyncDataQueryClient.fetch", new=fake_fetch),
@@ -855,7 +892,7 @@ def test_fetch_mixed_naive_aware_valid_window_succeeds(sample_table):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -881,7 +918,7 @@ def test_fetch_no_lookback_with_both_endpoints_is_fine(sample_table):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=sample_table),
+            new=AsyncMock(return_value=_result_for(sample_table)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -977,7 +1014,7 @@ def test_fetch_latest_flag_reduces_output():
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.fetch",
-            new=AsyncMock(return_value=tbl),
+            new=AsyncMock(return_value=_result_for(tbl, ("A", "B"))),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",
@@ -1243,7 +1280,7 @@ def test_describe_quiet_suppresses_warnings(monkeypatch):
     with (
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.describe",
-            new=AsyncMock(return_value=meta),
+            new=AsyncMock(return_value=_meta_for(meta)),
         ),
         patch(
             "nwd_dataquery.cli.AsyncDataQueryClient.aclose",

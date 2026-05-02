@@ -492,21 +492,13 @@ wheels = [
 
 [[package]]
 name = "nwd-dataquery"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "aia-chaser" },
     { name = "httpx" },
     { name = "pyarrow" },
     { name = "typer" },
-]
-
-[package.optional-dependencies]
-pandas = [
-    { name = "pandas" },
-]
-polars = [
-    { name = "polars" },
 ]
 
 [package.dev-dependencies]
@@ -526,12 +518,9 @@ dev = [
 requires-dist = [
     { name = "aia-chaser", specifier = ">=3.4.1" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.0" },
-    { name = "polars", marker = "extra == 'polars'", specifier = ">=1.0" },
     { name = "pyarrow", specifier = ">=23.0.1" },
     { name = "typer", specifier = ">=0.24.1" },
 ]
-provides-extras = ["polars", "pandas"]
 
 [package.metadata.requires-dev]
 dev = [

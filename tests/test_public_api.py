@@ -5,6 +5,8 @@ from nwd_dataquery import (
     AsyncDataQueryClient,
     DataQueryError,
     DataQueryParseError,
+    MetadataResult,
+    QueryResult,
     UnknownTsidWarning,
     __version__,
 )
@@ -14,6 +16,8 @@ def test_public_exports_are_available():
     assert AsyncDataQueryClient is nwd_dataquery.AsyncDataQueryClient
     assert DataQueryError is nwd_dataquery.DataQueryError
     assert DataQueryParseError is nwd_dataquery.DataQueryParseError
+    assert MetadataResult is nwd_dataquery.MetadataResult
+    assert QueryResult is nwd_dataquery.QueryResult
     assert UnknownTsidWarning is nwd_dataquery.UnknownTsidWarning
 
 
@@ -29,6 +33,8 @@ def test_all_contains_expected_names():
         "DataQueryParseError",
         "DataQueryPayload",
         "LocationEntry",
+        "MetadataResult",
+        "QueryResult",
         "TimeseriesEntry",
         "UnknownTsidWarning",
         "__version__",
