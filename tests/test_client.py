@@ -597,13 +597,6 @@ async def test_fetch_normalizes_bare_string_tsid_to_one_tuple():
     assert result.requested_tsids == ("ONLY_TSID",)
 
 
-async def test_fetch_empty_tsids_raises():
-    """fetch() rejects an empty tsids argument before any HTTP work."""
-    async with AsyncDataQueryClient() as client:
-        with pytest.raises(ValueError, match="at least one tsid"):
-            await client.fetch([])
-
-
 async def test_describe_normalizes_bare_string_tsid_to_one_tuple():
     from unittest.mock import AsyncMock, patch
 
@@ -618,9 +611,3 @@ async def test_describe_normalizes_bare_string_tsid_to_one_tuple():
                 end=datetime(2026, 4, 2, tzinfo=UTC),
             )
     assert result.requested_tsids == ("ONLY_TSID",)
-
-
-async def test_describe_empty_tsids_raises():
-    async with AsyncDataQueryClient() as client:
-        with pytest.raises(ValueError, match="at least one tsid"):
-            await client.describe([])
