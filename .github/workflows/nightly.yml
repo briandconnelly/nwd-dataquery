@@ -30,6 +30,6 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `Nightly live tests failed on ${new Date().toISOString().slice(0,10)}`,
-              body: `The nightly live-smoke job failed. Dataquery 2.0 may have drifted. See the run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              labels: ['api-drift'],
+              body: `The nightly live-smoke job failed. Possible causes: API drift, an upstream outage, or a data gap on the probed gauge. Triage by checking the response schema vs row count in the run logs. Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['nightly-failure'],
             });

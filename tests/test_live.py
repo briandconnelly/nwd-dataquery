@@ -19,7 +19,7 @@ async def test_live_fetch_lwsc_elevation_nonempty():
     async with AsyncDataQueryClient() as client:
         result = await client.fetch(
             "LWSC.Elev-Lake.Ave.1Hour.0.NWSRADIO-RAW",
-            lookback=timedelta(days=2),
+            lookback=timedelta(days=14),
         )
     assert isinstance(result.table, pa.Table)
     assert result.table.num_rows > 0
