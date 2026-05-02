@@ -157,6 +157,25 @@ def test_unknown_tsids_skips_non_dict_location_body():
     assert r.unknown_tsids == ("B",)
 
 
+def test_unknown_tsids_skips_non_dict_timeseries_value():
+    """Defensive: a truthy non-dict `timeseries` value (e.g. a list) is skipped,
+    not crashed on with AttributeError when .keys() is called.
+    """
+    payload = cast(
+        DataQueryPayload,
+        {"LWSC": {"timeseries": ["not", "a", "dict"]}, "MUDM": {"timeseries": {"A": {}}}},
+    )
+    r = QueryResult(
+        table=_empty_table(),
+        payload=payload,
+        requested_tsids=("A", "B"),
+        resolved_window=(datetime(2026, 4, 1, tzinfo=UTC), datetime(2026, 4, 2, tzinfo=UTC)),
+        endpoint="x",
+        warnings=(),
+    )
+    assert r.unknown_tsids == ("B",)
+
+
 def test_query_result_is_frozen():
     """frozen=True must reject attribute assignment after construction."""
     r = QueryResult(

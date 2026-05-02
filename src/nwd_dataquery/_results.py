@@ -24,7 +24,9 @@ def _compute_unknown_tsids(
     for loc_body in payload.values():
         if not isinstance(loc_body, dict):
             continue
-        ts = loc_body.get("timeseries") or {}
+        ts = loc_body.get("timeseries")
+        if not isinstance(ts, dict):
+            continue
         present.update(ts.keys())
     seen: set[str] = set()
     out: list[str] = []

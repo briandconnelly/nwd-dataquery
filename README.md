@@ -56,10 +56,12 @@ asyncio.run(main())
 The default `pyarrow.Table` is the canonical form. Use Arrow's converters for other backends:
 
 ```python
+import polars as pl  # requires `pip install polars`
+
 result = await client.fetch(tsid)
 table  = result.table                     # pyarrow.Table
 pandas = result.table.to_pandas()
-polars = pl.from_arrow(result.table)      # requires `pip install polars`
+polars = pl.from_arrow(result.table)
 ```
 
 ## Quick start (CLI)
